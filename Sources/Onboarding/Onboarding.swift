@@ -429,17 +429,15 @@ private struct ChallengeDetailStep: View {
         }
     }
 
-    // The "sticky paper showing number" task rows — the colored tilted tile IS the sticky note.
-    private static let stickyTilts: [Double] = [-5, 4, -3, 5, -4, 3]
+    // The "sticky paper showing number" rows — upright tile; the soft card shadow gives the lifted sticky-note feel.
     private func taskRow(_ i: Int, _ d: HabitDraft) -> some View {
         HStack(spacing: 16) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(d.color.gradient)
-                    .frame(width: 46, height: 46)
-                    .shadow(color: .black.opacity(0.16), radius: 3, x: 1, y: 2)
-                Text("\(i + 1)").font(Font2.serif(22, .semibold)).italic().foregroundStyle(Theme.ink.opacity(0.85))
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(d.color.gradient)
+                    .frame(width: 48, height: 48)
+                    .shadow(color: .black.opacity(0.22), radius: 5, x: 0, y: 4)
+                Text("\(i + 1)").font(Font2.serif(24, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.8))
             }
-            .rotationEffect(.degrees(Self.stickyTilts[i % Self.stickyTilts.count]))
             Text(d.title).font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
