@@ -1,0 +1,127 @@
+name: Her75
+
+options:
+  bundleIdPrefix: app.75her.com
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+# Stamp the current Xcode version so Xcode stops prompting "Update to recommended settings".
+attributes:
+  LastUpgradeCheck: 2660
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_PREVIEWS: "YES"
+    DEVELOPMENT_TEAM: PVQK77DQWL
+    DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+
+# Shared font list reused by app + widget Info.plists
+fontList: &fontList
+  - CormorantGaramond.ttf
+  - CormorantGaramond-Italic.ttf
+  - HankenGrotesk-Regular.ttf
+  - HankenGrotesk-Medium.ttf
+  - HankenGrotesk-Bold.ttf
+  - HankenGrotesk-ExtraBold.ttf
+
+targets:
+
+  # ─── Main App ────────────────────────────────────────────────────────────────
+  Her75:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: App
+      - path: Shared
+      - path: Sources/Design
+      - path: Sources/Components
+      - path: Sources/Models
+      - path: Sources/Store
+      - path: Sources/Features
+      - path: Sources/Onboarding
+      - path: Assets.xcassets
+      - path: Resources/Images
+        type: folder
+      - path: Fonts
+    entitlements:
+      path: App/Her75.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.75her.com
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 75 Her
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Light
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSupportsIndirectInputEvents: true
+        NSCameraUsageDescription: "75 Her uses your camera to capture a quick proof photo when you complete a daily mission. Photos stay private on your device."
+        NSPhotoLibraryUsageDescription: "75 Her accesses your photo library so you can pick a proof or progress photo. Photos stay private on your device."
+        NSPhotoLibraryAddUsageDescription: "75 Her can save your daily proof and progress photos to your library."
+        UIAppFonts: *fontList
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.75her.com
+        CODE_SIGN_ENTITLEMENTS: App/Her75.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - target: Her75Widget
+
+  # ─── Widget Extension ────────────────────────────────────────────────────────
+  Her75Widget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Widget
+      - path: Shared
+      - path: Sources/Design
+      - path: Sources/Components
+      - path: Sources/Models
+      - path: Sources/Store
+      - path: Assets.xcassets
+      - path: Fonts
+    entitlements:
+      path: Widget/Her75Widget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.75her.com
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: 75 Her
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UIAppFonts: *fontList
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.75her.com.widget
+        CODE_SIGN_ENTITLEMENTS: Widget/Her75Widget.entitlements
+
+# Shared scheme so it persists across `xcodegen generate` (written to xcshareddata, not xcuserdata).
+schemes:
+  Her75:
+    build:
+      targets:
+        Her75: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

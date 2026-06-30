@@ -1,0 +1,116 @@
+import WidgetKit
+import SwiftUI
+import SwiftData
+
+// MARK: - Timeline model
+
+struct MissionSnapshot: Identifiable {
+    let id: UUID
+    let title: String
+    let color: HabitColor
+    let done: Bool
+}
+
+struct TodayEntry: TimelineEntry {
+    let date: Date
+    let day: Int
+    let track: String
+    let missions: [MissionSnapshot]
+}
+
+// MARK: - Provider
+
+struct TodayProvider: TimelineProvider {
+    func placeholder(in context: Context) -> TodayEntry {
+        TodayEntry(date: .now, day: 12, track: "75 Her", missions: [])
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
+        completion(Self.load())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
+        // Reload at the next midnight so the day counter / completion state rolls over.
+        let next = Calendar.current.nextDate(after: .now,
+                                             matching: DateComponents(hour: 0, minute: 0),
+                                             matchingPolicy: .nextTime) ?? Date().addingTimeInterval(3600)
+        completion(Timeline(entries: [Self.load()], policy: .after(next)))
+    }
+
+    /// Read the shared SwiftData store with a local context (provider runs off the main actor).
+    static func load() -> TodayEntry {
+        let context = ModelContext(Persistence.shared)
+        let challenges = (try? context.fetch(FetchDescriptor<Challenge>())) ?? []
+        guard let c = challenges.sorted(by: { $0.createdAt > $1.createdAt }).first else {
+            return TodayEntry(date: .now, day: 0, track: "75 Her", missions: [])
+        }
+        let missions = c.habitsOrdered.map {
+            MissionSnapshot(id: $0.id, title: $0.title, color: $0.color, done: $0.isDoneToday)
+        }
+        return TodayEntry(date: .now, day: c.currentDay, track: c.track.title, missions: missions)
+    }
+}
+
+// MARK: - View
+
+struct Her75WidgetView: View {
+    var entry: TodayEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                HiveHex(color: .rose, width: 16)
+                Text("Day \(entry.day) · \(entry.track)")
+                    .font(Font2.sans(12, .bold))
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+            }
+
+            if entry.missions.isEmpty {
+                Spacer()
+                Text("Start your challenge in the app")
+                    .font(Font2.sans(12, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+                Spacer()
+            } else {
+                let shown = Array(entry.missions.prefix(4))
+                let w: CGFloat = shown.count <= 2 ? 84 : shown.count == 3 ? 76 : 70
+                HStack(spacing: -w * 0.18) {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { i, m in
+                        Button(intent: ToggleMissionIntent(habitID: m.id)) {
+                            HiveHex(colors: m.color.stops, width: w) {
+                                VStack(spacing: 1) {
+                                    Image(systemName: m.done ? "checkmark" : "circle")
+                                        .font(.system(size: w * 0.18, weight: .bold))
+                                    Text(m.title)
+                                        .font(Font2.sans(w * 0.13, .bold))
+                                        .lineLimit(1).minimumScaleFactor(0.7)
+                                        .padding(.horizontal, 4)
+                                }
+                                .foregroundStyle(m.color.onColor)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .offset(y: i % 2 == 0 ? -w * 0.08 : w * 0.08)
+                        .zIndex(Double(i))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(14)
+        .containerBackground(Theme.cream, for: .widget)
+    }
+}
+
+// MARK: - Widget
+
+struct Her75TodayWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: WidgetKind.today, provider: TodayProvider()) { entry in
+            Her75WidgetView(entry: entry)
+        }
+        .configurationDisplayName("Today's Missions")
+        .description("Tap a mission to check it off without opening the app.")
+        .supportedFamilies([.systemMedium])
+    }
+}
