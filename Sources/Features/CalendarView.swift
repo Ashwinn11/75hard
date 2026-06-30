@@ -114,7 +114,7 @@ struct CalendarView: View {
     private func fill(_ frac: Double?) -> Color {
         guard let frac else { return Color.white.opacity(0.5) }
         if frac >= 1 { return Theme.rose }
-        if frac > 0  { return Theme.pink.opacity(0.45 + frac * 0.4) }
+        if frac > 0  { return Theme.coral.opacity(0.45 + frac * 0.4) }
         return Theme.chipFill
     }
 
@@ -132,7 +132,7 @@ struct CalendarView: View {
     private var legend: some View {
         HStack(spacing: 16) {
             legendDot(Theme.rose, "Complete")
-            legendDot(Theme.pink.opacity(0.6), "Partial")
+            legendDot(Theme.coral.opacity(0.6), "Partial")
             legendDot(Theme.chipFill, "Missed")
         }.padding(.top, 4)
     }

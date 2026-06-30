@@ -23,8 +23,10 @@ running, pilates, flowers, journaling, sunrise, portrait). Any subset works.
 | `onb_together` | the "Do it together" partner-up screen (a hug photo; cut-out/plain bg looks best) |
 | `onb_ready`  | the "you're ready" screen |
 
-## Choose-your-hard track clusters (3 small photos per track)
-`track_her_1` `track_her_2` `track_her_3` · `track_strict_1..3` · `track_soft_1..3` · `track_hot_1..3`
+## Challenge photo strips (4 photos each — choose-challenge list + detail)
+`ch_<id>_1` … `ch_<id>_4`, where `<id>` is one of:
+`her75, hard, medium, soft, betterMe, glowUp, sugarFree, mentalWellness, hotter, squat30`
+e.g. `ch_her75_1` … `ch_her75_4`, `ch_sugarFree_1` … `ch_sugarFree_4`, …
 
 ## Friends preview avatars (square, faces)
 `friend_maddy` · `friend_anna` · `friend_blake`

@@ -22,7 +22,7 @@ final class OnboardingModel {
     var wantMost: String?
     var dailyVibe: String?
     var hardest: String?
-    var track: ChallengeTrack = .her
+    var track: ChallengeTrack = .her75
     var trackPicked = false
     var lengthDays = 75
     var startDate = Calendar.current.startOfDay(for: Date())
@@ -30,6 +30,7 @@ final class OnboardingModel {
 
     func pick(_ t: ChallengeTrack) {
         track = t; trackPicked = true
+        lengthDays = t.defaultDays
         habitDrafts = t.defaultHabits.map { HabitDraft(seed: $0) }
     }
 }
@@ -83,20 +84,20 @@ struct OnboardingFlow: View {
         case 3:  NameStep(model: model, onNext: next)
         case 4:  QuizStep(lead: "What do you", accent: "want", trail: "most?",
                           options: ["Feel like myself", "Trust my routine", "Confidence back", "Stay consistent"],
-                          photo: "onb_q_want", selection: bind(\.wantMost), onNext: next)
+                          photo: "onb_q_want", color: Theme.taupe, selection: bind(\.wantMost), onNext: next)
         case 5:  QuizStep(lead: "What's your", accent: "daily", trail: "vibe?",
                           options: ["Slow morning", "Busy but balanced", "Offline evening", "Reset day"],
-                          photo: "onb_q_vibe", selection: bind(\.dailyVibe), onNext: next)
+                          photo: "onb_q_vibe", color: Theme.coral, selection: bind(\.dailyVibe), onNext: next)
         case 6:  QuizStep(lead: "What's the", accent: "hardest?", trail: nil,
                           options: ["Motivation dips", "Food choices", "Better sleep", "Less scrolling"],
-                          photo: "onb_q_hard", selection: bind(\.hardest), onNext: next)
-        case 7:  ChooseTrackStep(model: model, onNext: next)
-        case 8:  CustomizeStep(model: model, onNext: next)
+                          photo: "onb_q_hard", color: Theme.periwinkle, selection: bind(\.hardest), onNext: next)
+        case 7:  ChooseChallengeStep(model: model, onNext: next)
+        case 8:  ChallengeDetailStep(model: model, onNext: next)
         case 9:  StartDateStep(model: model, onNext: next)
         case 10: LengthStep(model: model, onNext: next)
         case 11: LoadingStep(onNext: next)
-        case 12: ReadyStep(model: model, onNext: next)
-        case 13: FeedbackStep(onNext: next)
+        case 12: HoneycombShareStep(model: model, onNext: next)
+        case 13: ReadyStep(model: model, onNext: next)
         case 14: SignPromiseStep(onNext: next)
         default: PaywallStep(model: model, onStart: finish)
         }
@@ -140,7 +141,7 @@ private struct OnbBottomCard<Content: View>: View {
             .padding(22)
             .frame(maxWidth: .infinity)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-            .shadow(color: .black.opacity(0.05), radius: 16, y: 6)
+            .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10)
             .padding(.horizontal, 16).padding(.bottom, 18)
     }
 }
@@ -247,12 +248,13 @@ private struct ChipsStep: View {
                                       ("sparkles", "glowing"), ("scope", "focused"), ("leaf.fill", "calm")])
             }
             Spacer(minLength: 18)
-            VStack(spacing: 2) {
-                TypewriterHeadline(lead: "Become Her", size: 40, alignment: .center)
-                Text("(in 75 days)").font(Font2.serif(24, .medium)).italic().foregroundStyle(Theme.rose)
+            OnbBottomCard {
+                VStack(spacing: 2) {
+                    TypewriterHeadline(lead: "Become Her", size: 36, alignment: .center)
+                    Text("(in 75 days)").font(Font2.serif(22, .medium)).italic().foregroundStyle(Theme.coral)
+                }
+                PrimaryButton(title: "I'm ready", color: Theme.sage, action: onNext)
             }
-            Spacer(minLength: 20)
-            ctaPad(PrimaryButton(title: "I'm ready", color: Theme.orchid, action: onNext))
         }
     }
 }
@@ -288,6 +290,7 @@ private struct NameStep: View {
 private struct QuizStep: View {
     let lead: String; let accent: String; let trail: String?
     let options: [String]; let photo: String
+    var color: Color = Theme.orchid
     @Binding var selection: String?
     var onNext: () -> Void
     var body: some View {
@@ -303,125 +306,104 @@ private struct QuizStep: View {
             if selection != nil, AppImage.exists(photo) {
                 PhotoFill(name: photo).frame(height: 200).frame(maxWidth: .infinity).clipped().transition(.opacity)
             }
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.orchid, action: onNext)
+            ctaPad(PrimaryButton(title: "Continue", color: color, action: onNext)
                 .disabled(selection == nil).opacity(selection == nil ? 0.5 : 1)).padding(.top, 12)
         }
         .animation(.easeInOut, value: selection)
     }
 }
 
-// MARK: - 8 Choose track (Popular / Custom tabs + clusters)
+// MARK: - 7 Choose challenge (scrollable library)
 
-private struct ChooseTrackStep: View {
+private struct ChooseChallengeStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
-    @State private var tab = 0
-    private let joined: [ChallengeTrack: String] = [.her: "+24,872", .strict: "+2,352", .soft: "+7,460", .hot: "+8,321"]
-    private let clusterColors: [ChallengeTrack: [HabitColor]] = [
-        .her: [.amber, .sage, .blush], .strict: [.berry, .sand, .sky],
-        .soft: [.blush, .sand, .lilac], .hot: [.rose, .berry, .amber]]
-    private let tracks: [ChallengeTrack] = [.her, .strict, .soft, .hot]
 
     var body: some View {
         VStack(spacing: 0) {
-            TypewriterHeadline(lead: "Choose…", size: 38, alignment: .center).padding(.top, 6)
-            HStack(spacing: 28) {
+            TypewriterHeadline(lead: "Choose your", accent: "challenge", size: 34, accentColor: Theme.ink, alignment: .center)
+                .padding(.top, 6)
+            HStack(spacing: 28) {                              // Popular / Custom tabs
                 VStack(spacing: 6) {
                     Text("Popular").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
-                    Rectangle().fill(Theme.ink).frame(width: 60, height: 2.5)
+                    Rectangle().fill(Theme.ink).frame(width: 64, height: 2.5)
                 }
-                Button { Haptics.select(); model.pick(.custom); onNext() } label: {   // Custom → opens custom screen
+                Button { Haptics.select(); model.pick(.custom); onNext() } label: {   // Custom → custom detail
                     VStack(spacing: 6) {
                         Text("Custom").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink.opacity(0.35))
-                        Rectangle().fill(.clear).frame(width: 60, height: 2.5)
+                        Rectangle().fill(.clear).frame(width: 64, height: 2.5)
                     }
                 }.buttonStyle(.plain)
-            }.padding(.top, 12)
+            }.padding(.top, 14)
             ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(tracks) { t in
-                        Button { Haptics.select(); model.pick(t) } label: { trackCard(t) }.buttonStyle(PressableStyle())
+                VStack(spacing: 24) {
+                    ForEach(ChallengeTrack.catalog) { t in
+                        Button { Haptics.select(); model.pick(t); onNext() } label: { challengeCard(t) }
+                            .buttonStyle(PressableStyle())
                     }
-                }.padding(.horizontal, 20).padding(.top, 18)
+                }
+                .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 24)
             }
-            ctaPad(PrimaryButton(title: "Let's do it", color: Theme.taupe, action: { if !model.trackPicked { model.pick(model.track) }; onNext() }))
         }
     }
 
-    private func tabButton(_ title: String, _ i: Int) -> some View {
-        VStack(spacing: 6) {
-            Text(title).font(Font2.sans(16, .bold)).foregroundStyle(tab == i ? Theme.ink : Theme.ink.opacity(0.35))
-            Rectangle().fill(tab == i ? Theme.ink : .clear).frame(width: 60, height: 2.5)
-        }.onTapGesture { withAnimation { tab = i } }
-    }
-
-    private func trackCard(_ t: ChallengeTrack) -> some View {
-        let on = model.trackPicked && model.track == t
-        return HStack(spacing: 16) {
+    private func challengeCard(_ t: ChallengeTrack) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .top) {
-                TrackCluster(prefix: "track_\(t.rawValue)", colors: clusterColors[t] ?? [.rose, .blush, .sand])
-                    .padding(.top, 10)
-                Text(joined[t] ?? "").font(Font2.sans(10, .bold)).foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(.white, in: Capsule())
+                HStack(spacing: 3) {
+                    ForEach(Array(t.photos.enumerated()), id: \.offset) { i, p in
+                        PhotoFill(name: p, fallback: stripFallback(t, i))
+                            .frame(maxWidth: .infinity).frame(height: 108).clipped()
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                Text(t.joined).font(Font2.sans(11, .bold)).foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(.white, in: Capsule())
                     .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+                    .offset(y: -11)
             }
-            Text(t.title).font(Font2.sans(20, .heavy)).foregroundStyle(Theme.ink)
-            Spacer()
-            if on { Circle().fill(Theme.ink).frame(width: 9, height: 9) }
+            Text(t.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
         }
-        .padding(16).background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(on ? Theme.rose : .clear, lineWidth: 2))
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
     }
 
-    private var customCard: some View {
-        let on = model.trackPicked && model.track == .custom
-        return HStack(spacing: 16) {
-            Image(systemName: "slider.horizontal.3").font(.system(size: 26, weight: .semibold)).foregroundStyle(Theme.rose).frame(width: 70)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Build your own").font(Font2.sans(19, .heavy)).foregroundStyle(Theme.ink)
-                Text("Start from scratch").font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.55))
-            }
-            Spacer()
-            if on { Circle().fill(Theme.ink).frame(width: 9, height: 9) }
-        }
-        .padding(16).background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(on ? Theme.rose : .clear, lineWidth: 2))
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
+    private func stripFallback(_ t: ChallengeTrack, _ i: Int) -> LinearGradient {
+        let palette = HabitColor.palette
+        return palette[(abs(t.rawValue.hashValue) + i) % palette.count].gradient
     }
+
 }
 
-// MARK: - 9 Customize (edit + add task)
+// MARK: - 8 Challenge detail (numbered sticky task list, editable)
 
-private struct CustomizeStep: View {
+private struct ChallengeDetailStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
     @State private var editing: Int?
-    private let cols = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
-    private var title: String { model.track == .custom ? "Custom Challenge" : "\(model.track.title) Challenge" }
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(title).font(Font2.serif(28, .semibold)).foregroundStyle(Theme.ink).padding(.top, 6)
             ScrollView {
-                LazyVGrid(columns: cols, spacing: 14) {
-                    ForEach(Array(model.habitDrafts.enumerated()), id: \.element.id) { i, d in
-                        Button { editing = i } label: { card(d) }.buttonStyle(PressableStyle())
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(model.track.title).font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    photoStrip
+                    Button { addTask() } label: {
+                        Text("Create Daily Task +").font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
+                            .frame(maxWidth: .infinity).padding(.vertical, 15)
+                            .background(Theme.chipFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                }.padding(.horizontal, 20).padding(.top, 16)
-
-                Button {
-                    model.habitDrafts.append(HabitDraft(title: "New daily task", subtitle: "Tap to customise", color: .lilac, icon: "plus"))
-                    editing = model.habitDrafts.count - 1
-                } label: {
-                    Text("New Task +").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(.white, in: Capsule()).shadow(color: .black.opacity(0.05), radius: 8, y: 4)
-                }.padding(.horizontal, 20).padding(.top, 16)
-
-                testimonials.padding(.top, 22)
+                    VStack(spacing: 0) {
+                        ForEach(Array(model.habitDrafts.enumerated()), id: \.element.id) { i, d in
+                            taskRow(i, d)
+                            if i < model.habitDrafts.count - 1 { Divider().padding(.leading, 62) }
+                        }
+                    }
+                    testimonials.padding(.top, 6)
+                }
+                .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
             }
-            ctaPad(PrimaryButton(title: "Let's go", color: Theme.orchid, action: onNext))
+            ctaPad(PrimaryButton(title: "Continue", color: Theme.sage, action: onNext))
         }
         .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
             if let i = editing, model.habitDrafts.indices.contains(i) {
@@ -431,15 +413,47 @@ private struct CustomizeStep: View {
         }
     }
 
-    private func card(_ d: HabitDraft) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: d.icon).font(.system(size: 18, weight: .semibold)).foregroundStyle(d.color.onColor)
-            Spacer(minLength: 18)
-            Text(d.title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink).lineLimit(2)
-            Text(d.subtitle).font(Font2.sans(11.5, .medium)).foregroundStyle(Theme.ink.opacity(0.6)).lineLimit(1)
+    private var photoStrip: some View {
+        ZStack(alignment: .top) {
+            HStack(spacing: 3) {
+                ForEach(Array(model.track.photos.enumerated()), id: \.offset) { i, p in
+                    PhotoFill(name: p, fallback: HabitColor.blush.gradient)
+                        .frame(maxWidth: .infinity).frame(height: 96).clipped()
+                }
+            }.clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            if !model.track.joined.isEmpty {
+                Text(model.track.joined).font(Font2.sans(11, .bold)).foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10).padding(.vertical, 5).background(.white, in: Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
+            }
         }
-        .padding(14).frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-        .background(d.color.gradient, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    // The "sticky paper showing number" task rows — the colored tilted tile IS the sticky note.
+    private static let stickyTilts: [Double] = [-5, 4, -3, 5, -4, 3]
+    private func taskRow(_ i: Int, _ d: HabitDraft) -> some View {
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(d.color.gradient)
+                    .frame(width: 46, height: 46)
+                    .shadow(color: .black.opacity(0.16), radius: 3, x: 1, y: 2)
+                Text("\(i + 1)").font(Font2.serif(22, .semibold)).italic().foregroundStyle(Theme.ink.opacity(0.85))
+            }
+            .rotationEffect(.degrees(Self.stickyTilts[i % Self.stickyTilts.count]))
+            Text(d.title).font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button { editing = i } label: {
+                Image(systemName: "pencil").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.ink.opacity(0.55))
+                    .frame(width: 30, height: 30).background(Theme.chipFill, in: Circle())
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func addTask() {
+        model.habitDrafts.append(HabitDraft(title: "New daily task", subtitle: "", color: .sage, icon: "plus"))
+        editing = model.habitDrafts.count - 1
     }
 
     private var testimonials: some View {
@@ -491,7 +505,7 @@ private struct StartDateStep: View {
                     .font(Font2.sans(13, .bold)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 12)
             }
             Spacer()
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.periwinkle, action: onNext))
+            ctaPad(PrimaryButton(title: "Continue", color: Theme.orchid, action: onNext))
         }
         .onAppear { apply(0) }
     }
@@ -551,7 +565,7 @@ private struct LengthStep: View {
                 .tint(Theme.sage).padding(.horizontal, 30).padding(.top, 16)
             Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 6)
             Spacer()
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.sage, action: onNext))
+            ctaPad(PrimaryButton(title: "Continue", color: Theme.taupe, action: onNext))
         }
     }
     private var range: String {
@@ -616,46 +630,80 @@ private struct LoadingStep: View {
     }
 }
 
-// MARK: - 14 Ready
+// MARK: - 12 Honeycomb (shareable proof grid)
+
+private struct HoneycombShareStep: View {
+    @Bindable var model: OnboardingModel
+    var onNext: () -> Void
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 16)
+            HiveComb(color: .rose, cells: Array(repeating: .sample, count: model.lengthDays),
+                     width: 300, visibleCells: model.lengthDays)
+                .frame(maxWidth: .infinity)
+            Spacer(minLength: 18)
+            VStack(spacing: 8) {
+                TypewriterHeadline(lead: "Proof worth", accent: "sharing", size: 34, accentColor: Theme.coral, alignment: .center)
+                Text("A proof photo each day fills your hive. By day \(model.lengthDays) you'll have a sticker worth posting.")
+                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.55))
+                    .multilineTextAlignment(.center).padding(.horizontal, 36)
+            }
+            Spacer()
+            ctaPad(PrimaryButton(title: "Love it", color: Theme.coral, action: onNext))
+        }
+    }
+}
+
+// MARK: - 13 Ready / your plan (the sticker card, like 1505)
 
 private struct ReadyStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 24)
-            VStack(spacing: 6) {
-                (Text("You're ready, ").font(Font2.serif(34, .semibold)).foregroundColor(Theme.ink)
-                 + Text(model.name.isEmpty ? "you" : model.name).font(Font2.serif(34, .bold)).italic().foregroundColor(Theme.rose)
-                 + Text(".").font(Font2.serif(34, .semibold)).foregroundColor(Theme.ink))
-                (Text("Your ").font(Font2.serif(26, .medium)).foregroundColor(Theme.ink)
-                 + Text("\(model.lengthDays)-day").font(Font2.serif(26, .semibold)).italic().foregroundColor(Theme.ink)
-                 + Text(" mission starts ").font(Font2.serif(26, .medium)).foregroundColor(Theme.ink)
-                 + Text("now").font(Font2.serif(26, .bold)).italic().foregroundColor(Theme.rose)
-                 + Text(".").font(Font2.serif(26, .medium)).foregroundColor(Theme.ink))
-                    .multilineTextAlignment(.center)
-            }.padding(.horizontal, 28)
-            if AppImage.exists("onb_ready") {
-                PhotoFill(name: "onb_ready").frame(height: 280).frame(maxWidth: .infinity).clipped().padding(.top, 20)
+            VStack(spacing: 2) {
+                Text("Congrats.").font(Font2.serif(34, .semibold)).foregroundStyle(Theme.ink)
+                (Text("You're ").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink)
+                 + Text("ready").font(Font2.serif(30, .semibold)).italic().foregroundColor(Theme.rose)
+                 + Text(" to start").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink))
             }
+            .multilineTextAlignment(.center).padding(.top, 10).padding(.horizontal, 28)
             Spacer()
-            ctaPad(PrimaryButton(title: "Let's begin", color: Theme.taupe, action: onNext))
+            planCard
+            Spacer()
+            ctaPad(PrimaryButton(title: "Start now", color: Theme.periwinkle, action: onNext))
         }
     }
-}
 
-// MARK: - 15 Feedback
-
-private struct FeedbackStep: View {
-    var onNext: () -> Void
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-            TypewriterHeadline(lead: "We'd love to hear", accent: "what", trail: "you think.", size: 32, accentColor: Theme.ink, alignment: .center)
-                .padding(.horizontal, 30)
-            Spacer()
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.periwinkle, action: onNext))
+    private var planCard: some View {
+        let end = Calendar.current.date(byAdding: .day, value: model.lengthDays - 1, to: model.startDate) ?? model.startDate
+        let range = "\(model.startDate.formatted(.dateTime.month(.abbreviated).day()))  →  \(end.formatted(.dateTime.month(.abbreviated).day()))".lowercased()
+        return VStack(alignment: .leading, spacing: 12) {
+            (Text("day").font(Font2.serif(26, .medium)).italic().foregroundColor(Theme.ink)
+             + Text(" one").font(Font2.serif(26, .semibold)).foregroundColor(Theme.ink))
+            Text(range).font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(model.habitDrafts.enumerated()), id: \.element.id) { i, d in
+                    HStack(alignment: .top, spacing: 14) {
+                        Text("\(i + 1)").font(Font2.serif(17, .medium)).foregroundStyle(Theme.ink.opacity(0.6))
+                            .frame(width: 18, alignment: .leading)
+                        Text(d.title).font(Font2.sans(13.5, .semibold)).foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }.padding(.top, 2)
+            Divider().padding(.top, 4)
+            HStack {
+                Text(model.track.title.uppercased()).font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.ink.opacity(0.35))
+                Spacer()
+                Text("BY 75 HER").font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.ink.opacity(0.35))
+            }
         }
+        .padding(22)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10)
+        .padding(.horizontal, 34)
     }
 }
 
@@ -691,7 +739,7 @@ private struct SignPromiseStep: View {
                 Button { onNext() } label: { Text("Skip").font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).underline() }
             }
             .padding(20).background(.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 16, y: 8).padding(.horizontal, 20)
+            .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10).padding(.horizontal, 20)
             Spacer()
         }
     }
@@ -725,7 +773,7 @@ private struct PaywallStep: View {
                 }.padding(.horizontal, 22)
             }
             ctaPad(VStack(spacing: 10) {
-                PrimaryButton.ink("Become Her", action: onStart)
+                PrimaryButton(title: "Become Her", color: Theme.orchid, action: onStart)
                 HStack(spacing: 18) { Text("Terms"); Text("Restore"); Text("Privacy") }
                     .font(Font2.sans(11, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
             }).padding(.top, 8)

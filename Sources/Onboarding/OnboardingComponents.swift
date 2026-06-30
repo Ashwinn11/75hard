@@ -231,7 +231,7 @@ struct EditTaskSheet: View {
             .background(draft.color.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             HStack(spacing: 12) {
-                ForEach(HabitColor.allCases) { c in
+                ForEach(HabitColor.palette) { c in
                     Circle().fill(c.gradient).frame(width: 30, height: 30)
                         .overlay(Circle().stroke(Theme.ink, lineWidth: draft.color == c ? 2.5 : 0))
                         .onTapGesture { Haptics.select(); draft.color = c }

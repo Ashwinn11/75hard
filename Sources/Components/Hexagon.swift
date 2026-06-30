@@ -181,7 +181,7 @@ struct HiveComb: View {
         case .sample:
             ZStack {
                 RoundedHexagon(cornerRadius: corner)
-                    .fill(LinearGradient(colors: [Theme.pink.opacity(0.55), Theme.ring],
+                    .fill(LinearGradient(colors: [Theme.coral.opacity(0.5), Theme.ring],
                                          startPoint: .top, endPoint: .bottom))
                 Image(systemName: "sparkles")
                     .font(.system(size: max(6, cr * 0.5)))

@@ -85,7 +85,7 @@ struct SoftCard: ViewModifier {
         content
             .padding(padding)
             .background(Color.white, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 18, x: 0, y: 8)
+            .shadow(color: .black.opacity(0.11), radius: 20, x: 0, y: 9)
     }
 }
 

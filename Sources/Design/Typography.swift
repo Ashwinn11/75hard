@@ -55,7 +55,7 @@ struct SerifHeadline: View {
     var trail: String? = nil
     var size: CGFloat = 40
     var color: Color = Theme.ink
-    var accentColor: Color = Theme.pink
+    var accentColor: Color = Theme.coral
     var alignment: TextAlignment = .center
 
     var body: some View {

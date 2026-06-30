@@ -9,7 +9,6 @@ enum Theme {
     static let paper     = Color(hex: "FDFCFB")   // background — warm near-white
     static let cream     = paper                  // back-compat alias
     static let ink       = Color(hex: "171717")   // text + dark CTA
-    static let plum      = Color(hex: "242424")   // dark neutral surface (rare)
 
     // MARK: Per-screen pastel accents
     static let coral      = Color(hex: "E9887C")  // welcome / partner
@@ -19,14 +18,7 @@ enum Theme {
     static let taupe      = Color(hex: "AA9281")  // choose / ready
 
     static let rose      = coral                  // back-compat: primary accent
-    static let roseDeep  = Color(hex: "E0746A")
-    static let pink      = Color(hex: "EBA5CA")    // soft pink (card / accents)
-
-    // MARK: Custom-challenge card colors
-    static let cardYellow = Color(hex: "EED796")
-    static let cardGreen  = Color(hex: "D2E7A8")
-    static let cardBlue   = Color(hex: "CADDF4")
-    static let cardPink   = Color(hex: "EBA5CA")
+    static let roseDeep  = Color(hex: "E0746A")   // deeper coral (avatar gradient)
 
     // MARK: Surfaces / lines
     static let chipFill  = Color(hex: "F3F2F2")
