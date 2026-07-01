@@ -8,6 +8,8 @@ struct ProfileView: View {
     @State private var showRestart = false
     @State private var photoItem: PhotosPickerItem?
     @State private var showPicker = false
+    @State private var social = SocialStore.shared
+    @State private var bioDraft = ""
     private var challenge: Challenge? { challenges.first }
 
     var body: some View {
@@ -23,9 +25,9 @@ struct ProfileView: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        challengeSection(c)
                         nameEditor(c)
-                        remindersCard
+                        bioEditor
+                        challengeSection(c)
                         restartButton
                     }
                     .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 28)
@@ -38,17 +40,26 @@ struct ProfileView: View {
             }
         }
         .her75Background()
-        .alert("Restart challenge?", isPresented: $showRestart) {
+        .task { await social.bootstrap() }
+        .onAppear { bioDraft = social.myBio }
+        .onChange(of: bioDraft) { _, v in if v.count > 140 { bioDraft = String(v.prefix(140)) } }
+        .task(id: bioDraft) {
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled, bioDraft != social.myBio else { return }
+            await social.setBio(bioDraft)
+        }
+        .alert("Delete all data?", isPresented: $showRestart) {
             Button("Cancel", role: .cancel) {}
-            Button("Restart", role: .destructive) { restart() }
+            Button("Delete everything", role: .destructive) { restart() }
         } message: {
-            Text("This deletes your current challenge and all its progress, and takes you back to onboarding.")
+            Text("This erases your challenge, progress, photo, and profile — and removes you from CloudKit so no one can find you. You'll unfriend everyone and start completely fresh. This can't be undone.")
         }
         .onChange(of: photoItem) { _, item in
             Task {
                 if let data = try? await item?.loadTransferable(type: Data.self) {
                     ProfilePhoto.save(data)
                     Haptics.success()
+                    await social.syncPhoto()
                 }
             }
         }
@@ -115,61 +126,37 @@ struct ProfileView: View {
         }
     }
 
-    private var remindersCard: some View {
+    private var bioEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            EyebrowLabel(text: "Notifications", color: Theme.ink.opacity(0.45))
-            ReminderRow(slot: .morning, title: "Daily reminder")
-                .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            EyebrowLabel(text: "Your bio", color: Theme.ink.opacity(0.45))
+            TextField("A short line about you — shown when friends find you.", text: $bioDraft, axis: .vertical)
+                .font(Font2.sans(15, .medium)).foregroundStyle(Theme.ink)
+                .lineLimit(2...4)
+                .padding(14).background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.ring, lineWidth: 1))
+            Text("\(bioDraft.count)/140")
+                .font(Font2.sans(11, .medium)).foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
     private var restartButton: some View {
         Button(role: .destructive) { showRestart = true } label: {
-            Text("Restart challenge")
+            Text("Delete all data")
                 .font(Font2.sans(15, .bold)).foregroundStyle(Theme.rose)
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
                 .background(.white, in: Capsule())
                 .overlay(Capsule().stroke(Theme.rose.opacity(0.4), lineWidth: 1.5))
         }
+        .ctaWidth()
     }
 
     private func restart() {
+        // Wipe CloudKit (profile, invite, my follow edges) + all local social/onboarding state.
+        Task { await social.wipe() }
+        // Delete the local challenge (+cascade habits/completions) → drops back to onboarding.
         if let c = challenge { context.delete(c); try? context.save() }
-        for slot in ReminderSlot.allCases { Reminders.cancel(slot) }
         Haptics.rigid()
-    }
-}
-
-// MARK: - Reminder row
-
-private struct ReminderRow: View {
-    let slot: ReminderSlot
-    let title: String
-    @AppStorage private var on: Bool
-
-    init(slot: ReminderSlot, title: String) {
-        self.slot = slot
-        self.title = title
-        _on = AppStorage(wrappedValue: false, "rem.\(slot.rawValue).on")
-    }
-
-    var body: some View {
-        HStack {
-            Text(title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
-            Spacer()
-            Toggle("", isOn: Binding(get: { on }, set: { newValue in
-                on = newValue
-                if newValue {
-                    Task {
-                        _ = await Reminders.requestAuth()
-                        Reminders.schedule(slot, at: slot.defaultTime)
-                    }
-                } else {
-                    Reminders.cancel(slot)
-                }
-            })).labelsHidden().tint(Theme.rose)
-        }
-        .padding(14)
     }
 }
 

@@ -13,7 +13,7 @@ struct RootView: View {
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
-        .tint(Theme.rose)
+        .tint(Theme.ink)
         .environment(celebration)
         .blur(radius: celebration.day != nil ? 22 : 0)
         .overlay {

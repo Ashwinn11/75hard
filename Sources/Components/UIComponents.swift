@@ -35,6 +35,18 @@ extension PrimaryButton {
     }
 }
 
+extension View {
+    /// Caps a primary CTA to ~75% of the screen width, centered — matching the onboarding
+    /// button treatment (`ctaPad`) so buttons feel consistent across the app.
+    func ctaWidth() -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            self.containerRelativeFrame(.horizontal) { w, _ in w * 0.75 }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 // MARK: - Chip
 
 struct Chip: View {
@@ -172,5 +184,70 @@ struct RulerSlider: View {
             }
             .frame(height: showLabels ? 78 : 44)
         }
+    }
+}
+
+// MARK: - Invite ticket (perforated coupon showing your name + join code)
+
+/// Reused by onboarding's "invite your friends" screen and the Friends tab. `code` is nil while
+/// the code is still being provisioned (shows a placeholder). The perforation notches are the page
+/// background biting into a warm cream ticket.
+struct InviteTicket: View {
+    let name: String
+    var code: String? = nil
+    var compact: Bool = false            // show only the code half (no "Join <name>" header/perforation)
+    var ticketFill: Color = Color(hex: "F3EEE3")
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !compact {
+                VStack(spacing: 10) {
+                    Text("75 HER").font(Font2.sans(13, .bold)).tracking(5).foregroundStyle(Theme.ink.opacity(0.4))
+                    (Text("Join ").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink)
+                     + Text(name.isEmpty ? "me" : name).font(Font2.serif(30, .semibold)).italic().foregroundColor(Theme.ink)
+                     + Text("\nfor the challenge").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 26).padding(.top, 46).padding(.bottom, 30)
+
+                perforation
+            }
+
+            VStack(spacing: 8) {
+                Text(code.map(SocialStore.format) ?? "•••• ••••")
+                    .font(Font2.sans(34, .heavy)).tracking(4)
+                    .foregroundStyle(code == nil ? Theme.ink.opacity(0.3) : Theme.ink)
+                    .contentTransition(.opacity)
+                Text("Share this code with your girls")
+                    .font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
+            }
+            .padding(.horizontal, 26).padding(.top, compact ? 34 : 28).padding(.bottom, compact ? 34 : 46)
+        }
+        .frame(maxWidth: .infinity)
+        .background(ticketFill, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Theme.ink.opacity(0.05), lineWidth: 1))
+        .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
+    }
+
+    private var perforation: some View {
+        ZStack {
+            DashedRule().stroke(Theme.ink.opacity(0.2), style: StrokeStyle(lineWidth: 1.5, dash: [6, 7]))
+                .frame(height: 1.5).padding(.horizontal, 26)
+        }
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .leading) { notch.offset(x: -13) }
+        .overlay(alignment: .trailing) { notch.offset(x: 13) }
+    }
+
+    private var notch: some View { Circle().fill(Theme.paper).frame(width: 26, height: 26) }
+}
+
+/// A single horizontal line through the middle of its rect (for dashed perforations).
+struct DashedRule: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        return p
     }
 }

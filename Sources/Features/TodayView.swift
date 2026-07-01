@@ -47,6 +47,10 @@ struct TodayView: View {
         }
         .her75Background()
         .sheet(isPresented: $editing) { if let c = challenge { EditHabitsSheet(challenge: c) } }
+        .task {
+            await SocialStore.shared.bootstrap()
+            if let c = challenge { await SocialStore.shared.publishStatus(for: c) }
+        }
     }
 
     private func date(_ c: Challenge) -> Date {
@@ -69,6 +73,8 @@ struct TodayView: View {
         } else {
             celebratedDays.remove(idx)
         }
+        // Keep my shared status current so friends see today's progress.
+        Task { await SocialStore.shared.publishStatus(for: c) }
     }
 }
 
@@ -119,8 +125,8 @@ struct HabitRow: View {
 
             Button { Haptics.tap(); HabitActions.toggle(habit, on: date, context: context); onAction() } label: {
                 ZStack {
-                    Circle().fill(done ? Theme.coral : Color.clear).frame(width: 28, height: 28)
-                    Circle().stroke(done ? Theme.coral : Theme.ring, lineWidth: 2).frame(width: 28, height: 28)
+                    Circle().fill(done ? Theme.ink : Color.clear).frame(width: 28, height: 28)
+                    Circle().stroke(done ? Theme.ink : Theme.ring, lineWidth: 2).frame(width: 28, height: 28)
                     if done { Image(systemName: "checkmark").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white) }
                 }
             }

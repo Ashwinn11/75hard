@@ -41,7 +41,8 @@ struct OnboardingFlow: View {
     @Environment(\.modelContext) private var context
     @State private var model = OnboardingModel()
     @State private var step = 0
-    private let last = 14
+    private let last = 17
+    private let loadingStep = 14
 
     var body: some View {
         ZStack {
@@ -59,15 +60,15 @@ struct OnboardingFlow: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            if step >= 1 && step != 11 {        // 11 = loading (no back)
+            if step >= 1 && step != loadingStep {   // loading has no back
                 Button { back() } label: {
                     Image(systemName: "chevron.left").font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Theme.ink).frame(width: 38, height: 38)
                         .background(Color.white, in: Circle()).overlay(Circle().stroke(Theme.ring, lineWidth: 1))
                 }
             }
-            if (4...10).contains(step) {        // quiz → length: setup progress
-                ProgressBarThin(value: Double(step - 3) / 7.0, track: Theme.ring, fill: Theme.ink, height: 6)
+            if (5...11).contains(step) {        // quiz → length: setup progress
+                ProgressBarThin(value: Double(step - 4) / 7.0, track: Theme.ring, fill: Theme.ink, height: 6)
                     .frame(maxWidth: 170)
             }
             Spacer()
@@ -80,24 +81,27 @@ struct OnboardingFlow: View {
         switch step {
         case 0:  WelcomeStep(onNext: next)
         case 1:  AppPreviewStep(model: model, onNext: next)
-        case 2:  ChipsStep(onNext: next)
-        case 3:  NameStep(model: model, onNext: next)
-        case 4:  QuizStep(lead: "What do you", accent: "want", trail: "most?",
-                          options: ["Feel like myself", "Trust my routine", "Confidence back", "Stay consistent"],
+        case 2:  FriendsPreviewStep(onNext: next)
+        case 3:  ChipsStep(onNext: next)
+        case 4:  NameStep(model: model, onNext: next)
+        case 5:  QuizStep(lead: "What do you", accent: "want", trail: "most?",
+                          options: ["Discipline", "Confidence", "More energy", "Peace of mind"],
                           photo: "onb_q_want", color: Theme.taupe, selection: bind(\.wantMost), onNext: next)
-        case 5:  QuizStep(lead: "What's your", accent: "daily", trail: "vibe?",
-                          options: ["Slow morning", "Busy but balanced", "Offline evening", "Reset day"],
+        case 6:  QuizStep(lead: "What's your", accent: "daily", trail: "vibe?",
+                          options: ["Calm & slow", "Busy & driven", "Social & fun", "Quiet & focused"],
                           photo: "onb_q_vibe", color: Theme.coral, selection: bind(\.dailyVibe), onNext: next)
-        case 6:  QuizStep(lead: "What's the", accent: "hardest?", trail: nil,
-                          options: ["Motivation dips", "Food choices", "Better sleep", "Less scrolling"],
+        case 7:  QuizStep(lead: "What's the", accent: "hardest?", trail: nil,
+                          options: ["Staying consistent", "Sugar cravings", "Enough sleep", "Screen time"],
                           photo: "onb_q_hard", color: Theme.periwinkle, selection: bind(\.hardest), onNext: next)
-        case 7:  ChooseChallengeStep(model: model, onNext: next)
-        case 8:  ChallengeDetailStep(model: model, onNext: next)
-        case 9:  StartDateStep(model: model, onNext: next)
-        case 10: LengthStep(model: model, onNext: next)
-        case 11: LoadingStep(onNext: next)
-        case 12: ReadyStep(model: model, onNext: next)
-        case 13: SignPromiseStep(onNext: next)
+        case 8:  ChooseChallengeStep(model: model, onNext: next)
+        case 9:  ChallengeDetailStep(model: model, onNext: next)
+        case 10: StartDateStep(model: model, onNext: next)
+        case 11: LengthStep(model: model, onNext: next)
+        case 12: PartnerUpStep(onPartner: next, onSolo: { skip(to: loadingStep) })
+        case 13: InviteTicketStep(model: model, onNext: next)
+        case 14: LoadingStep(onNext: next)
+        case 15: ReadyStep(model: model, onNext: next)
+        case 16: SignPromiseStep(onNext: next)
         default: PaywallStep(model: model, onStart: finish)
         }
     }
@@ -107,6 +111,7 @@ struct OnboardingFlow: View {
     }
     private func next() { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = min(step + 1, last) } }
     private func back() { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = max(step - 1, 0) } }
+    private func skip(to s: Int) { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = min(max(s, 0), last) } }
 
     private func finish() {
         if model.habitDrafts.isEmpty { model.pick(model.track) }
@@ -118,6 +123,10 @@ struct OnboardingFlow: View {
             context.insert(h)
         }
         try? context.save()
+        // Persist quiz answers for friend-matching; SocialStore publishes them to the profile.
+        AppGroup.defaults.set(model.wantMost ?? "", forKey: "onbWant")
+        AppGroup.defaults.set(model.dailyVibe ?? "", forKey: "onbVibe")
+        AppGroup.defaults.set(model.hardest ?? "", forKey: "onbHardest")
         Haptics.success()
     }
 }
@@ -178,11 +187,7 @@ private struct AppPreviewStep: View {
             MiniPhonePreview()
             Spacer()
             OnbBottomCard {
-                VStack(spacing: 4) {
-                    Text("Welcome to your").font(Font2.serif(28, .semibold)).foregroundStyle(Theme.ink)
-                    (Text("next ").font(Font2.serif(28, .semibold)).foregroundColor(Theme.ink)
-                     + Text("75 days").font(Font2.serif(28, .bold)).italic().foregroundColor(Theme.coral))
-                }
+                TypewriterHeadline(lead: "Welcome to your next", accent: "75 days", size: 28, accentColor: Theme.coral, alignment: .center)
                 PrimaryButton(title: "Continue", color: Theme.periwinkle, action: onNext)
             }
         }
@@ -193,36 +198,46 @@ private struct AppPreviewStep: View {
 
 private struct FriendsPreviewStep: View {
     var onNext: () -> Void
-    private let friends = [("Maddy", "@maddy", 75, "friend_maddy", HabitColor.rose),
-                           ("Anna", "@anna", 12, "friend_anna", HabitColor.lilac),
-                           ("Blake", "@blake", 38, "friend_blake", HabitColor.sage)]
+    // Same card language as the real Friends tab (name · day · done/total · progress), no handles.
+    private struct Peek { let name: String; let day: Int; let done: Int; let total: Int; let photo: String; let color: HabitColor }
+    private let peeks = [Peek(name: "Maddy", day: 75, done: 6, total: 6, photo: "friend_maddy", color: .rose),
+                         Peek(name: "Anna",  day: 12, done: 3, total: 5, photo: "friend_anna",  color: .lilac),
+                         Peek(name: "Blake", day: 38, done: 4, total: 6, photo: "friend_blake", color: .sage)]
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            VStack(spacing: -8) {
-                ForEach(Array(friends.enumerated()), id: \.offset) { i, f in
-                    HStack(spacing: 14) {
-                        ZStack {
-                            PhotoFill(name: f.3, fallback: f.4.gradient).frame(width: 50, height: 50).clipShape(Circle())
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(f.0).font(Font2.sans(17, .bold)).foregroundStyle(Theme.ink)
-                            Text("\(f.1)  ·  day \(f.2)").font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
-                        }
-                        Spacer()
-                    }
-                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
-                    .padding(.horizontal, CGFloat(i == 1 ? 30 : 12)).zIndex(Double(3 - i))
-                }
+            VStack(spacing: 12) {
+                ForEach(Array(peeks.enumerated()), id: \.offset) { _, f in card(f) }
             }
+            .padding(.horizontal, 22)
             Spacer()
             OnbBottomCard {
-                TypewriterHeadline(lead: "Follow your", accent: "friends", size: 32, accentColor: Theme.coral, alignment: .center)
+                TypewriterHeadline(lead: "Follow your", accent: "friends", size: 32, accentColor: Theme.sage, alignment: .center)
                 PrimaryButton(title: "Continue", color: Theme.sage, action: onNext)
             }
         }
+    }
+
+    private func card(_ f: Peek) -> some View {
+        let fraction = Double(f.done) / Double(f.total)
+        let complete = f.done >= f.total
+        return HStack(spacing: 14) {
+            PhotoFill(name: f.photo, fallback: f.color.gradient).frame(width: 48, height: 48).clipShape(Circle())
+            VStack(alignment: .leading, spacing: 5) {
+                Text(f.name).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                Text("Day \(f.day) · \(f.done)/\(f.total) done")
+                    .font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
+                ProgressCapsule(fraction: fraction, accent: Theme.sage)
+            }
+            Spacer(minLength: 8)
+            if complete {
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 24)).foregroundStyle(Theme.sage)
+            } else {
+                Text("\(Int(fraction * 100))%").font(Font2.sans(14, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
+            }
+        }
+        .padding(14).background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
     }
 }
 
@@ -563,34 +578,92 @@ private struct LengthStep: View {
     }
 }
 
-// MARK: - 12 Partner up
+// MARK: - 12 Partner up  →  13 Invite ticket
 
 private struct PartnerUpStep: View {
-    var onNext: () -> Void
+    var onPartner: () -> Void        // "Partner Up" → opens the invite ticket
+    var onSolo: () -> Void           // "I prefer solo" → skips ahead
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 10)
-            if AppImage.exists("onb_together") {
-                PhotoFill(name: "onb_together").frame(height: 220).frame(maxWidth: .infinity).clipped()
-            } else {
-                Image(systemName: "person.2.fill").font(.system(size: 60, weight: .light)).foregroundStyle(Theme.rose).frame(height: 220)
+            Group {
+                if AppImage.exists("onb_together") {
+                    PhotoFill(name: "onb_together")
+                } else {
+                    ZStack {
+                        LinearGradient(colors: [Theme.sage.opacity(0.55), Theme.sage],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                        Image(systemName: "person.2.fill").font(.system(size: 56, weight: .light)).foregroundStyle(.white)
+                    }
+                }
             }
-            TypewriterHeadline(lead: "Do it", accent: "together", size: 34, accentColor: Theme.rose, alignment: .center).padding(.top, 6)
+            .frame(height: 220).frame(maxWidth: .infinity).clipped()
+
+            TypewriterHeadline(lead: "Do it", accent: "together", size: 34, accentColor: Theme.rose, alignment: .center).padding(.top, 8)
             Text("Add your friends, see their progress, and keep each other accountable through the challenge.")
-                .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.55))
+                .font(Font2.sans(14, .medium)).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center).padding(.horizontal, 36).padding(.top, 8)
             Text("teaming up you're 24% more likely to finish")
                 .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-                .padding(.horizontal, 14).padding(.vertical, 8).background(Theme.chipFill, in: Capsule()).padding(.top, 14)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(.white, in: Capsule()).shadow(color: .black.opacity(0.06), radius: 6, y: 3).padding(.top, 14)
             Spacer()
             ctaPad(VStack(spacing: 10) {
-                PrimaryButton(title: "Partner Up", icon: "person.badge.plus", color: Theme.coral, action: onNext)
-                Button { onNext() } label: {
+                PrimaryButton(title: "Partner Up", icon: "person.badge.plus", color: Theme.coral, action: onPartner)
+                Button { Haptics.tap(); onSolo() } label: {
                     Text("I prefer solo").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
                         .frame(maxWidth: .infinity).padding(.vertical, 15)
                         .background(.white, in: Capsule()).overlay(Capsule().stroke(Theme.ring, lineWidth: 1.5))
                 }
             })
+        }
+    }
+}
+
+// MARK: - 13 Invite ticket (your join code)
+
+private struct InviteTicketStep: View {
+    @Bindable var model: OnboardingModel
+    var onNext: () -> Void
+    @State private var social = SocialStore.shared
+
+    private var shareText: String {
+        let who = model.name.isEmpty ? "me" : model.name
+        if let c = social.myCode { return "Join \(who) on 75 Her — enter code \(SocialStore.format(c)) to start the challenge together." }
+        return "Join me on 75 Her for the 75-day challenge."
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            (Text("Start the challenge\n").font(Font2.serif(32, .semibold)).foregroundColor(Theme.ink)
+             + Text("with").font(Font2.serif(32, .semibold)).italic().foregroundColor(Theme.ink)
+             + Text(" your friends?").font(Font2.serif(32, .semibold)).foregroundColor(Theme.ink))
+                .multilineTextAlignment(.center).padding(.top, 8).padding(.horizontal, 24)
+            Text("teaming up you're 24% more likely to finish!")
+                .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(.white, in: Capsule()).shadow(color: .black.opacity(0.06), radius: 6, y: 3).padding(.top, 16)
+            Spacer()
+            InviteTicket(name: model.name, code: social.myCode).padding(.horizontal, 22)
+            Spacer()
+            HStack(spacing: 12) {
+                PrimaryButton(title: "Continue", color: Theme.periwinkle, action: onNext)
+                ShareLink(item: shareText) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .bold))
+                        Text("Send invites").font(Font2.sans(17, .bold))
+                    }
+                    .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 17)
+                    .background(Theme.ink, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
+                    .shadow(color: Theme.ink.opacity(0.3), radius: 10, y: 5)
+                }
+                .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+            }
+            .padding(.horizontal, 20).padding(.bottom, 22)
+        }
+        .task {
+            await social.bootstrap()
+            await social.setDisplayName(model.name)
         }
     }
 }

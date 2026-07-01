@@ -54,6 +54,10 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.app.75her.com
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.app.75her.com
+        com.apple.developer.icloud-services:
+          - CloudKit
     info:
       path: App/Info.plist
       properties:
