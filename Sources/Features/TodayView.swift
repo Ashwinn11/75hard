@@ -252,24 +252,30 @@ struct ConfettiPiece: View {
 
 struct TabHeader<Trailing: View>: View {
     let day: Int
+    var showAvatar = true
     @ViewBuilder var trailing: () -> Trailing
     @AppStorage("profilePhotoV") private var photoVersion = 0
 
     var body: some View {
         HStack(alignment: .top) {
-            ZStack(alignment: .bottom) {
-                avatar
-                Text("day \(day)")
-                    .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 11).padding(.vertical, 4)
-                    .background(.white, in: Capsule())
-                    .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
-                    .offset(y: 13)
+            if showAvatar {
+                ZStack(alignment: .bottom) {
+                    avatar
+                    dayPill.offset(y: 13)
+                }
             }
             Spacer()
             trailing()
         }
         .padding(.horizontal, 22).padding(.top, 10)
+    }
+
+    private var dayPill: some View {
+        Text("day \(day)")
+            .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+            .padding(.horizontal, 11).padding(.vertical, 4)
+            .background(.white, in: Capsule())
+            .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
     }
 
     private var avatar: some View {
@@ -286,10 +292,6 @@ struct TabHeader<Trailing: View>: View {
         .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
         .id(photoVersion)
     }
-}
-
-extension TabHeader where Trailing == EmptyView {
-    init(day: Int) { self.init(day: day) { EmptyView() } }
 }
 
 // MARK: - Edit tasks sheet (the pencil)
@@ -424,33 +426,3 @@ struct EditHabitSheet: View {
     }
 }
 
-// MARK: - Profile bubble (used by the Profile screen)
-
-struct ProfileBubble: View {
-    let name: String
-    @AppStorage("profilePhotoV") private var photoVersion = 0
-    private var initials: String {
-        let parts = name.split(separator: " ")
-        let chars = parts.prefix(2).compactMap { $0.first }
-        return String(chars).uppercased()
-    }
-    var body: some View {
-        ZStack {
-            if let img = ProfilePhoto.load() {
-                Image(uiImage: img).resizable().scaledToFill()
-            } else {
-                Theme.roseGradient
-                if initials.isEmpty {
-                    Image(systemName: "person.fill").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
-                } else {
-                    Text(initials).font(Font2.sans(18, .heavy)).foregroundStyle(.white)
-                }
-            }
-        }
-        .frame(width: 52, height: 52)
-        .clipShape(Circle())
-        .overlay(Circle().stroke(.white, lineWidth: 2))
-        .shadow(color: Theme.rose.opacity(0.3), radius: 8, x: 0, y: 4)
-        .id(photoVersion)
-    }
-}

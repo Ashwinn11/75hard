@@ -42,8 +42,6 @@ struct FriendStatus: Identifiable, Equatable {
     var habits: [FriendHabit] = []
 
     var displayName: String { name.isEmpty ? "Friend" : name }
-    var fraction: Double { total <= 0 ? 0 : min(1, Double(done) / Double(total)) }
-    var isComplete: Bool { total > 0 && done >= total }
 }
 
 /// A lightweight reference to a person (for pending / incoming request rows).
@@ -55,15 +53,13 @@ struct PersonRef: Identifiable, Equatable {
     var displayName: String { name.isEmpty ? "Friend" : name }
 }
 
-/// A "people you may know" candidate — a friend-of-a-friend, with a bio preview.
+/// A "people you may know" candidate. Match scoring ranks the list; the card shows only
+/// photo / name / bio.
 struct SuggestedPerson: Identifiable, Equatable {
     let id: String                  // userID
     let name: String
     let bio: String
     var photo: Data? = nil
-    var sameChallenge: Bool = false // on the same challenge as me
-    var challengeTitle: String = "" // their challenge, shown as a tag
-    var sharedTags: [String] = []   // matching quiz answers (want / vibe / hardest)
     var displayName: String { name.isEmpty ? "Friend" : name }
 }
 
@@ -99,7 +95,7 @@ final class SocialStore {
     private(set) var friends: [FriendStatus] = []
     private(set) var incoming: [PersonRef] = []  // people who requested me (awaiting my accept)
     private(set) var outgoing: [PersonRef] = []  // people I requested (awaiting their accept)
-    private(set) var isBusy = false
+    private(set) var suggested: [SuggestedPerson] = []  // live match-ranked people to add
 
     private let container = CKContainer(identifier: "iCloud.app.75her.com")
     private var db: CKDatabase { container.publicCloudDatabase }
@@ -111,10 +107,6 @@ final class SocialStore {
     private var justRemoved: Set<String> = []    // edges we just deleted; bridges the same lag on removal
     private var myProfileRecord: CKRecord?
     private var lastPublishedKey = ""
-    private var ignoredIncoming: Set<String> {
-        get { Set(AppGroup.defaults.stringArray(forKey: "socialIgnored") ?? []) }
-        set { AppGroup.defaults.set(Array(newValue), forKey: "socialIgnored") }
-    }
 
     private enum RT { static let profile = "Profile"; static let follow = "Follow"; static let invite = "Invite" }
     private static let codeAlphabet = Array("ABCDEFGHJKMNPQRSTUVWXYZ23456789")   // no 0/O/1/I/L
@@ -196,23 +188,6 @@ final class SocialStore {
 
     // MARK: Friend actions
 
-    /// Add a friend by their invite code: resolve code → their userID → create our edge me→them.
-    func addByCode(_ raw: String) async throws {
-        guard case .ready = phase, let me = myID else { throw SocialError.notReady }
-        let code = Self.sanitizeCode(raw)
-        guard code.count >= 5 else { throw SocialError.invalidCode }
-        isBusy = true; defer { isBusy = false }
-
-        let invite: CKRecord
-        do { invite = try await db.record(for: CKRecord.ID(recordName: code)) }
-        catch { throw SocialError.invalidCode }
-        guard let targetID = invite["owner"] as? String else { throw SocialError.invalidCode }
-        guard targetID != me else { throw SocialError.cantAddYourself }
-
-        if ignoredIncoming.contains(targetID) { ignoredIncoming.remove(targetID) }
-        try await follow(targetID)
-    }
-
     /// Resolve an invite code to the person it belongs to (name + bio) **without** adding them,
     /// so the UI can confirm "is this who you meant?" before sending a request.
     func lookup(_ raw: String) async throws -> PersonRef {
@@ -234,12 +209,28 @@ final class SocialStore {
                          photo: photoData(p))
     }
 
-    /// Accept an incoming request (or re-affirm a friendship) by creating our edge me→them.
+    /// Accept an incoming request (or send a new one). The local lists update the moment you tap —
+    /// the CloudKit save and a background refresh reconcile afterwards.
     func accept(_ person: PersonRef) async throws {
         guard case .ready = phase else { throw SocialError.notReady }
-        isBusy = true; defer { isBusy = false }
-        if ignoredIncoming.contains(person.id) { ignoredIncoming.remove(person.id) }
-        try await follow(person.id)
+        let isAccept = incoming.contains(where: { $0.id == person.id })
+
+        if isAccept {
+            // Accepting a request → they're a friend right away; live status fills in on refresh.
+            incoming.removeAll { $0.id == person.id }
+            if !friends.contains(where: { $0.id == person.id }) {
+                friends.append(FriendStatus(id: person.id, name: person.name, day: 0, done: 0, total: 0,
+                                            challenge: "", updatedAt: nil, photo: person.photo, bio: person.bio))
+                friends.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            }
+        } else if !outgoing.contains(where: { $0.id == person.id }) {
+            // A fresh request → appears under Pending immediately.
+            outgoing.append(person)
+            outgoing.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        }
+
+        do { try await follow(person.id, kind: isAccept ? "accept" : "request") }
+        catch { Task { await refresh() }; throw error }   // save failed — reconcile rolls the lists back
     }
 
     /// Record name for the directional edge from→to. CloudKit reserves record names beginning with
@@ -248,57 +239,86 @@ final class SocialStore {
         CKRecord.ID(recordName: "f_\(from)__\(to)")
     }
 
-    private func follow(_ targetID: String) async throws {
+    // Follow edges carry two timestamps that make removal a REAL disconnect (not an unfollow):
+    //   updatedAt — when I last affirmed this person (request / accept / re-add)
+    //   resetAt   — when I last removed them
+    // An edge is only "active" if updatedAt > resetAt, and the other person's edge only counts
+    // toward me if THEIR updatedAt postdates MY resetAt. So after a removal, both sides must go
+    // through a fresh request → accept cycle — a stale old acceptance can never auto-reconnect.
+
+    private func follow(_ targetID: String, kind: String) async throws {
         guard let me = myID else { throw SocialError.notReady }
-        let edge = CKRecord(recordType: RT.follow, recordID: edgeID(me, targetID))
+        let id = edgeID(me, targetID)
+        let edge: CKRecord
+        do { edge = try await db.record(for: id) }                     // re-affirm my existing edge
+        catch { edge = CKRecord(recordType: RT.follow, recordID: id) } // or start a fresh one
         edge["from"] = me
         edge["to"] = targetID
         edge["fromName"] = myName
-        edge["updatedAt"] = Date()
+        edge["kind"] = kind                 // "request" vs "accept" — an acceptance must never read as a sent request
+        edge["updatedAt"] = Date()          // resetAt is intentionally preserved (they must re-accept)
         do { _ = try await db.save(edge) }
-        catch let e as CKError where e.code == .serverRecordChanged { /* already exists — fine */ }
+        catch let e as CKError where e.code == .serverRecordChanged { /* raced an identical save — fine */ }
         justFollowed.insert(targetID); justRemoved.remove(targetID)   // reflect immediately; index may lag
-        ignoredIncoming.remove(targetID)                              // re-adding un-ignores them
-        await refresh()
+        Task { await refresh() }                                      // reconcile without blocking the tap
     }
 
-    /// Remove our edge me→them. Cancels an outgoing request.
+    /// Remove someone — cancels an outgoing request or unfriends. Stamps resetAt on my edge, which
+    /// voids their existing acceptance (and their app deletes its own edge on next refresh), so
+    /// re-connecting requires a fresh request and accept from both sides.
     func remove(_ id: String) async {
         guard let me = myID else { return }
-        isBusy = true; defer { isBusy = false }
-        _ = try? await db.deleteRecord(withID: edgeID(me, id))
+        // Optimistic: they leave the lists the moment you tap — and become suggestable again.
+        if let f = friends.first(where: { $0.id == id }) {
+            addToSuggested(id: id, name: f.name, bio: f.bio, photo: f.photo)
+        } else if let p = (incoming + outgoing).first(where: { $0.id == id }) {
+            addToSuggested(id: id, name: p.name, bio: p.bio, photo: p.photo)
+        }
+        friends.removeAll { $0.id == id }
+        incoming.removeAll { $0.id == id }
+        outgoing.removeAll { $0.id == id }
         justFollowed.remove(id); justRemoved.insert(id)
-        await refresh()
+        do {
+            // Fetch-or-create: a DECLINE stamps a tombstone even though I never had an edge.
+            // The resetAt tells their app to drop its own edge, so my decline clears their
+            // "request sent" row instead of leaving it hanging forever.
+            let rid = edgeID(me, id)
+            let rec: CKRecord
+            do { rec = try await db.record(for: rid) }
+            catch let ck as CKError where ck.code == .unknownItem {
+                rec = CKRecord(recordType: RT.follow, recordID: rid)
+            }
+            rec["from"] = me
+            rec["to"] = id
+            rec["resetAt"] = Date()
+            _ = try await db.save(rec)
+        } catch {
+            // Couldn't reach CloudKit — don't fake the removal (it would silently resurrect on
+            // relaunch). Un-hide and let the reconcile show the truth.
+            justRemoved.remove(id)
+        }
+        Task { await refresh() }
     }
 
-    /// Unfriend an established friend: delete my edge to them AND ignore their edge to me, so they
-    /// don't bounce back as an incoming request (I can't delete the edge they own).
-    func unfriend(_ id: String) async {
-        guard let me = myID else { return }
-        isBusy = true; defer { isBusy = false }
-        _ = try? await db.deleteRecord(withID: edgeID(me, id))
-        justFollowed.remove(id); justRemoved.insert(id)
-        var set = ignoredIncoming; set.insert(id); ignoredIncoming = set
-        await refresh()
-    }
+    /// Unfriend an established friend — same reset semantics as remove.
+    func unfriend(_ id: String) async { await remove(id) }
 
-    /// Locally dismiss an incoming request without accepting (we can't delete their edge).
-    func ignore(_ id: String) async {
-        var set = ignoredIncoming; set.insert(id); ignoredIncoming = set
-        await refresh()
-    }
+    /// Decline an incoming request — same reset semantics as remove: they move back into my
+    /// suggestions instantly, and their pending row clears on their next refresh. If they later
+    /// re-request (a NEW action after my decline), it shows up again — by design.
+    func ignore(_ id: String) async { await remove(id) }
 
-    /// Complete wipe: delete every record I own (Profile, Invite, all my outgoing Follow edges) so
-    /// no one can find me, clear all local social + onboarding state, and reset in-memory. Former
-    /// followers' edges to me (which I can't delete) are added to the ignore set so they don't
-    /// resurface as requests when I start over.
+    /// Complete wipe: reset every edge I own (the tombstones make everyone else's app forget me),
+    /// delete my Profile + Invite so no one can find me, clear all local social + onboarding
+    /// state, and reset in-memory for a completely fresh start.
     func wipe() async {
-        isBusy = true; defer { isBusy = false }
-        let toBlock = Set(friends.map(\.id)).union(incoming.map(\.id)).union(outgoing.map(\.id))
-
         if let me = myID {
+            // Reset (don't delete) my edges: the resetAt tombstone is what tells everyone else's
+            // app to drop their own edge to me, so I truly disappear from their side too.
             for rec in await queryFollows(field: "from", equals: me) {
-                _ = try? await db.deleteRecord(withID: rec.recordID)
+                rec["resetAt"] = Date()
+                rec["fromName"] = ""
+                _ = try? await db.save(rec)
             }
             _ = try? await db.deleteRecord(withID: CKRecord.ID(recordName: "u_\(me)"))
         }
@@ -306,15 +326,15 @@ final class SocialStore {
             _ = try? await db.deleteRecord(withID: CKRecord.ID(recordName: code))
         }
 
-        for k in ["socialCode", "socialBio", "socialPhotoUploadedV", "onbWant", "onbVibe", "onbHardest"] {
+        for k in ["socialCode", "socialBio", "socialIgnored", "socialPhotoUploadedV", "onbWant", "onbVibe", "onbHardest"] {
             AppGroup.defaults.removeObject(forKey: k)
         }
         UserDefaults.standard.removeObject(forKey: "profilePhotoV")
         try? FileManager.default.removeItem(at: ProfilePhoto.fileURL)
-        ignoredIncoming = toBlock
 
-        myCode = nil; myProfileRecord = nil; myID = nil; myName = ""; myChallenge = ""
-        friends = []; incoming = []; outgoing = []; justFollowed = []; justRemoved = []; lastPublishedKey = ""
+        myCode = nil; myProfileRecord = nil; myID = nil; myName = ""; myChallenge = ""; myBio = ""
+        friends = []; incoming = []; outgoing = []; suggested = []
+        justFollowed = []; justRemoved = []; lastPublishedKey = ""
         phase = .unknown
     }
 
@@ -333,7 +353,7 @@ final class SocialStore {
         } catch { }
     }
 
-    var myBio: String { AppGroup.defaults.string(forKey: "socialBio") ?? "" }
+    private(set) var myBio: String = AppGroup.defaults.string(forKey: "socialBio") ?? ""
 
     // Onboarding quiz answers, persisted at onboarding finish — the match vocabulary for suggestions.
     private var myWant: String { AppGroup.defaults.string(forKey: "onbWant") ?? "" }
@@ -342,7 +362,8 @@ final class SocialStore {
 
     /// Save my bio locally and to my public Profile (shown to others in suggestions).
     func setBio(_ raw: String) async {
-        let bio = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(140))
+        let bio = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100))
+        myBio = bio
         AppGroup.defaults.set(bio, forKey: "socialBio")
         guard case .ready = phase else { return }
         do {
@@ -399,15 +420,30 @@ final class SocialStore {
 
     // MARK: Suggestions (match-based — challenge + onboarding answers)
 
+    /// Refresh the live `suggested` list from the server, keeping locally re-suggested people
+    /// (declined requests, removed friends) at the top so they're visible immediately.
+    func loadSuggestions() async {
+        let fresh = await fetchRankedSuggestions()
+        let keep = suggested.filter { s in
+            !fresh.contains { $0.id == s.id } &&
+            !friends.contains { $0.id == s.id } &&
+            !incoming.contains { $0.id == s.id }
+        }
+        suggested = keep + fresh
+    }
+
+    /// Put someone back into the suggestions list (front), e.g. after a decline or unfriend.
+    private func addToSuggested(id: String, name: String, bio: String, photo: Data?) {
+        guard !suggested.contains(where: { $0.id == id }) else { return }
+        suggested.insert(SuggestedPerson(id: id, name: name, bio: bio, photo: photo), at: 0)
+    }
+
     /// People to add, ranked by how well they match me: same challenge first, then shared quiz
     /// answers (want / vibe / hardest), then most recently active. Draws from ALL public profiles,
     /// so it's never empty as long as other users exist — even with zero friends.
-    func suggestions() async -> [SuggestedPerson] {
+    private func fetchRankedSuggestions() async -> [SuggestedPerson] {
         guard case .ready = phase, let me = myID else { return [] }
 
-        // Note: ignored people are intentionally NOT excluded — a friend you removed should be
-        // re-addable from suggestions (removing them added them to the ignore set so they don't
-        // reappear as a *request*, but they can still be re-added here).
         var exclude = Set(friends.map(\.id)); exclude.insert(me)
         exclude.formUnion(incoming.map(\.id)); exclude.formUnion(outgoing.map(\.id))
 
@@ -416,22 +452,16 @@ final class SocialStore {
             guard let id = ownerID(of: rec), !exclude.contains(id) else { return nil }
 
             var score = 0
-            var shared: [String] = []
-            let theirChallenge = (rec["challenge"] as? String) ?? ""
-            let sameChallenge = !myChallenge.isEmpty && theirChallenge == myChallenge
-            if sameChallenge { score += 4 }
+            if !myChallenge.isEmpty, (rec["challenge"] as? String) == myChallenge { score += 4 }
             for (mine, key) in [(myWant, "want"), (myVibe, "vibe"), (myHardest, "hardest")] {
-                if !mine.isEmpty, (rec[key] as? String) == mine { score += 2; shared.append(mine) }
+                if !mine.isEmpty, (rec[key] as? String) == mine { score += 2 }
             }
 
             let person = SuggestedPerson(
                 id: id,
                 name: (rec["name"] as? String) ?? "",
                 bio: (rec["bio"] as? String) ?? "",
-                photo: photoData(rec),
-                sameChallenge: sameChallenge,
-                challengeTitle: theirChallenge,
-                sharedTags: shared)
+                photo: photoData(rec))
             return (person, score, (rec["updatedAt"] as? Date) ?? .distantPast)
         }
 
@@ -462,17 +492,74 @@ final class SocialStore {
 
     // MARK: Refresh graph
 
+    private var refreshing = false
+
     func refresh() async {
         guard case .ready = phase, let me = myID else { return }
+        guard !refreshing else { return }   // coalesce: 3 tabs bootstrapping at once = 1 refresh
+        refreshing = true; defer { refreshing = false }
 
         let incomingRecs = await queryFollows(field: "to", equals: me)      // edges → me
         let outgoingRecs = await queryFollows(field: "from", equals: me)    // edges from me
-        let incomingFrom = Set(incomingRecs.compactMap { $0["from"] as? String }).subtracting(justRemoved)
-        let outgoingTo   = Set(outgoingRecs.compactMap { $0["to"] as? String }).union(justFollowed).subtracting(justRemoved)
 
-        let friendIds   = incomingFrom.intersection(outgoingTo)
-        let ignored     = ignoredIncoming
-        let incomingIds = incomingFrom.subtracting(outgoingTo).subtracting(ignored)
+        func ts(_ rec: CKRecord?, _ key: String) -> TimeInterval {
+            (rec?[key] as? Date)?.timeIntervalSince1970 ?? 0
+        }
+        func isActive(_ rec: CKRecord) -> Bool { ts(rec, "updatedAt") > ts(rec, "resetAt") }
+
+        var mine: [String: CKRecord] = [:]      // my edge per target (including reset ones)
+        for rec in outgoingRecs { if let to = rec["to"] as? String { mine[to] = rec } }
+        var theirs: [String: CKRecord] = [:]    // their edge per person
+        for rec in incomingRecs { if let from = rec["from"] as? String { theirs[from] = rec } }
+
+        // Retire the lag-bridges once the server confirms the action they were covering —
+        // an immortal bridge lies: a stale justFollowed resurrects a deleted edge as "request
+        // sent"; a stale justRemoved would hide a future incoming request forever.
+        justFollowed = justFollowed.filter { id in
+            guard let m = mine[id] else { return true }   // not indexed yet — keep bridging
+            return !isActive(m)                            // stale pre-affirm copy — keep bridging
+        }
+        justRemoved = justRemoved.filter { id in
+            guard let m = mine[id] else { return false }   // gone — removal confirmed
+            return isActive(m)                             // still active server-side — keep hiding
+        }
+
+        // Auto-clean: someone removed me after I last AFFIRMED them → my affirmation is void.
+        // Delete my own edge so the disconnect is complete on both sides. Only an ACTIVE edge
+        // qualifies — an inactive one is my reset-tombstone, and deleting it would erase the
+        // memory that voids their older request (declined requests would resurrect forever).
+        for (id, their) in theirs {
+            if let m = mine[id], isActive(m), ts(their, "resetAt") > ts(m, "updatedAt") {
+                _ = try? await db.deleteRecord(withID: m.recordID)
+                mine.removeValue(forKey: id)
+            }
+        }
+
+        // Auto-clean: a dangling ACCEPTANCE. My accept-edge is only meaningful while the request
+        // it answered is still standing — if their side is gone or predates my reset, the
+        // friendship was revoked, and an acceptance must never show up as "request sent".
+        for (id, m) in mine {
+            guard isActive(m), (m["kind"] as? String) == "accept", !justFollowed.contains(id) else { continue }
+            let theirValid = theirs[id].map { isActive($0) && ts($0, "updatedAt") > ts(m, "resetAt") } ?? false
+            if !theirValid {
+                _ = try? await db.deleteRecord(withID: m.recordID)
+                mine.removeValue(forKey: id)
+            }
+        }
+
+        let outgoingTo = Set(mine.filter { isActive($0.value) }.keys)
+            .union(justFollowed).subtracting(justRemoved)
+        // Their edge counts only if it's active AND newer than my last removal of them.
+        let incomingFrom = Set(theirs.filter { id, rec in
+            isActive(rec) && ts(rec, "updatedAt") > ts(mine[id], "resetAt")
+        }.keys).subtracting(justRemoved)
+
+        // Friends additionally require MY affirmation to postdate THEIR last removal of me.
+        let friendIds = incomingFrom.intersection(outgoingTo).filter { id in
+            guard let m = mine[id] else { return true }   // freshly followed; record not queryable yet
+            return ts(m, "updatedAt") > ts(theirs[id], "resetAt")
+        }
+        let incomingIds = incomingFrom.subtracting(outgoingTo)
         let outgoingIds = outgoingTo.subtracting(incomingFrom)
 
         let profiles = await fetchProfiles(friendIds.union(incomingIds).union(outgoingIds))

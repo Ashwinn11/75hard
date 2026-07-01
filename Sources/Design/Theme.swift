@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Design system = reproduce the reference screenshots exactly: soft, editorial, near-white
-/// paper with one flat pastel accent per screen. (The honeycomb is our only addition.)
+/// paper with one flat pastel accent per screen.
 /// All hex values are sampled from the reference PNGs.
 enum Theme {
 

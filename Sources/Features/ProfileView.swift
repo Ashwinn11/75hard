@@ -5,32 +5,39 @@ import PhotosUI
 struct ProfileView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Challenge.createdAt, order: .reverse) private var challenges: [Challenge]
-    @State private var showRestart = false
     @State private var photoItem: PhotosPickerItem?
     @State private var showPicker = false
+    @State private var showSettings = false
+    @State private var showBioEdit = false
     @State private var social = SocialStore.shared
-    @State private var bioDraft = ""
+    @AppStorage("profilePhotoV") private var photoVersion = 0
     private var challenge: Challenge? { challenges.first }
 
     var body: some View {
         VStack(spacing: 0) {
             if let c = challenge {
-                TabHeader(day: c.currentDay) {
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        Image(systemName: "camera.fill")
+                TabHeader(day: c.currentDay, showAvatar: false) {
+                    Button { Haptics.tap(); showSettings = true } label: {
+                        Image(systemName: "gearshape.fill")
                             .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
                             .frame(width: 44, height: 44).background(.white, in: Circle())
                             .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
                     }
                 }
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        nameEditor(c)
-                        bioEditor
+                    VStack(spacing: 0) {
+                        PhotosPicker(selection: $photoItem, matching: .images) { avatar }
+                            .buttonStyle(PressableStyle())
+                            .padding(.top, 26)
+                        Text(c.ownerName.isEmpty ? "That Girl" : c.ownerName)
+                            .font(Font2.serif(32, .semibold)).foregroundStyle(Theme.ink)
+                            .padding(.top, 16)
+                        bioLine
+                            .padding(.top, 8)
                         challengeSection(c)
-                        restartButton
+                            .padding(.top, 30)
                     }
-                    .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 28)
+                    .padding(.horizontal, 20).padding(.bottom, 28)
                 }
                 .scrollIndicators(.hidden)
             } else {
@@ -41,19 +48,6 @@ struct ProfileView: View {
         }
         .her75Background()
         .task { await social.bootstrap() }
-        .onAppear { bioDraft = social.myBio }
-        .onChange(of: bioDraft) { _, v in if v.count > 140 { bioDraft = String(v.prefix(140)) } }
-        .task(id: bioDraft) {
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled, bioDraft != social.myBio else { return }
-            await social.setBio(bioDraft)
-        }
-        .alert("Delete all data?", isPresented: $showRestart) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete everything", role: .destructive) { restart() }
-        } message: {
-            Text("This erases your challenge, progress, photo, and profile — and removes you from CloudKit so no one can find you. You'll unfriend everyone and start completely fresh. This can't be undone.")
-        }
         .onChange(of: photoItem) { _, item in
             Task {
                 if let data = try? await item?.loadTransferable(type: Data.self) {
@@ -68,6 +62,47 @@ struct ProfileView: View {
                 ChallengePickerSheet(current: c.track) { switchChallenge(c, to: $0) }
             }
         }
+        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showBioEdit) { NavigationStack { EditBioView() } }
+    }
+
+    // Big centered avatar — tap to change the photo.
+    private var avatar: some View {
+        ZStack {
+            if let img = ProfilePhoto.load() {
+                Image(uiImage: img).resizable().scaledToFill()
+            } else {
+                Theme.roseGradient
+                Image(systemName: "person.fill")
+                    .font(.system(size: 52, weight: .semibold)).foregroundStyle(.white)
+            }
+        }
+        .frame(width: 128, height: 128).clipShape(Circle())
+        .overlay(Circle().stroke(.white, lineWidth: 3))
+        .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
+        .id(photoVersion)
+    }
+
+    @ViewBuilder private var bioLine: some View {
+        if social.myBio.isEmpty {
+            Button { Haptics.tap(); showBioEdit = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "pencil").font(.system(size: 12, weight: .bold))
+                    Text("Add a bio").font(Font2.sans(14, .bold))
+                }
+                .foregroundStyle(Theme.ink.opacity(0.55))
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(Theme.chipFill, in: Capsule())
+            }
+        } else {
+            Button { Haptics.tap(); showBioEdit = true } label: {
+                Text(social.myBio)
+                    .font(Font2.sans(15, .medium)).foregroundStyle(Theme.ink.opacity(0.65))
+                    .multilineTextAlignment(.center).lineLimit(3)
+                    .padding(.horizontal, 24)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // The selected challenge as a card; tap → all challenges (like onboarding).
@@ -75,10 +110,11 @@ struct ProfileView: View {
         Button { showPicker = true } label: {
             VStack(alignment: .leading, spacing: 8) {
                 EyebrowLabel(text: "Your challenge", color: Theme.ink.opacity(0.45))
-                ChallengeStripCard(track: c.track)
+                ChallengeStripCard(track: c.track, pillText: "Joined \(c.track.title)")
             }
         }
         .buttonStyle(PressableStyle())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func switchChallenge(_ c: Challenge, to t: ChallengeTrack) {
@@ -93,77 +129,16 @@ struct ProfileView: View {
         try? context.save()
         Haptics.success()
     }
-
-    private func headerCard(_ c: Challenge) -> some View {
-        HStack(spacing: 16) {
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                ZStack(alignment: .bottomTrailing) {
-                    ProfileBubble(name: c.ownerName).scaleEffect(1.15)
-                    Image(systemName: "camera.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
-                        .padding(6).background(Theme.rose, in: Circle()).overlay(Circle().stroke(.white, lineWidth: 1.5))
-                }
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                EyebrowLabel(text: c.track.title)
-                Text(c.ownerName.isEmpty ? "That Girl" : c.ownerName)
-                    .font(Font2.serif(28, .semibold)).foregroundStyle(Theme.ink)
-                Text("Day \(c.currentDay) of \(c.lengthDays)")
-                    .font(Font2.sans(13, .bold)).foregroundStyle(Theme.ink.opacity(0.55))
-            }
-            Spacer()
-        }
-    }
-
-    private func nameEditor(_ c: Challenge) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            EyebrowLabel(text: "Your name", color: Theme.ink.opacity(0.45))
-            TextField("Your name", text: Binding(
-                get: { c.ownerName },
-                set: { c.ownerName = $0; try? context.save() }))
-                .font(Font2.sans(17, .bold)).foregroundStyle(Theme.ink)
-                .padding(14).background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.ring, lineWidth: 1))
-        }
-    }
-
-    private var bioEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            EyebrowLabel(text: "Your bio", color: Theme.ink.opacity(0.45))
-            TextField("A short line about you — shown when friends find you.", text: $bioDraft, axis: .vertical)
-                .font(Font2.sans(15, .medium)).foregroundStyle(Theme.ink)
-                .lineLimit(2...4)
-                .padding(14).background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.ring, lineWidth: 1))
-            Text("\(bioDraft.count)/140")
-                .font(Font2.sans(11, .medium)).foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-    }
-
-    private var restartButton: some View {
-        Button(role: .destructive) { showRestart = true } label: {
-            Text("Delete all data")
-                .font(Font2.sans(15, .bold)).foregroundStyle(Theme.rose)
-                .frame(maxWidth: .infinity).padding(.vertical, 15)
-                .background(.white, in: Capsule())
-                .overlay(Capsule().stroke(Theme.rose.opacity(0.4), lineWidth: 1.5))
-        }
-        .ctaWidth()
-    }
-
-    private func restart() {
-        // Wipe CloudKit (profile, invite, my follow edges) + all local social/onboarding state.
-        Task { await social.wipe() }
-        // Delete the local challenge (+cascade habits/completions) → drops back to onboarding.
-        if let c = challenge { context.delete(c); try? context.save() }
-        Haptics.rigid()
-    }
 }
 
 // MARK: - Challenge card (onboarding photo-strip style) + picker
 
 struct ChallengeStripCard: View {
     let track: ChallengeTrack
+    var pillText: String? = nil      // override for the floating pill; nil → the track's joined count
+
+    private var pill: String? { pillText ?? (track.joined.isEmpty ? nil : track.joined) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .top) {
@@ -174,14 +149,22 @@ struct ChallengeStripCard: View {
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                if !track.joined.isEmpty {
-                    Text(track.joined).font(Font2.sans(11, .bold)).foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.white, in: Capsule())
-                        .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
+                if let pill {
+                    HStack(spacing: 5) {
+                        if pillText != nil {
+                            Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
+                        }
+                        Text(pill).font(Font2.sans(11, .bold))
+                    }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(.white, in: Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
                 }
             }
-            Text(track.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
+            if pillText == nil {   // pill already names the challenge — don't repeat it below
+                Text(track.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
+            }
         }
     }
 }

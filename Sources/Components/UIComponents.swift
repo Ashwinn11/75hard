@@ -196,7 +196,9 @@ struct InviteTicket: View {
     let name: String
     var code: String? = nil
     var compact: Bool = false            // show only the code half (no "Join <name>" header/perforation)
+    var shareText: String? = nil         // when set, a share icon appears inline next to the code
     var ticketFill: Color = Color(hex: "F3EEE3")
+    var notchColor: Color = Theme.paper  // should match the background behind the card
 
     var body: some View {
         VStack(spacing: 0) {
@@ -214,19 +216,37 @@ struct InviteTicket: View {
             }
 
             VStack(spacing: 8) {
-                Text(code.map(SocialStore.format) ?? "•••• ••••")
-                    .font(Font2.sans(34, .heavy)).tracking(4)
-                    .foregroundStyle(code == nil ? Theme.ink.opacity(0.3) : Theme.ink)
-                    .contentTransition(.opacity)
+                HStack(alignment: .center, spacing: 10) {
+                    Text(code.map(SocialStore.format) ?? "•••• ••••")
+                        .font(Font2.sans(34, .heavy)).tracking(4)
+                        .foregroundStyle(code == nil ? Theme.ink.opacity(0.3) : Theme.ink)
+                        .contentTransition(.opacity)
+
+                    if let shareText, code != nil {
+                        ShareLink(item: shareText) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Theme.ink.opacity(0.55))
+                                .frame(width: 32, height: 32)
+                                .background(Theme.ink.opacity(0.08), in: Circle())
+                        }
+                        .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+                        .accessibilityLabel("Share your invite code")
+                    }
+                }
                 Text("Share this code with your girls")
                     .font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
             }
             .padding(.horizontal, 26).padding(.top, compact ? 34 : 28).padding(.bottom, compact ? 34 : 46)
         }
         .frame(maxWidth: .infinity)
-        .background(ticketFill, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Theme.ink.opacity(0.05), lineWidth: 1))
-        .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
+        .background {
+            // Shadow lives on the card shape only, so the notch circles (which poke past the
+            // ticket edge) don't cast their own halos.
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(ticketFill)
+                .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
+        }
     }
 
     private var perforation: some View {
@@ -235,11 +255,11 @@ struct InviteTicket: View {
                 .frame(height: 1.5).padding(.horizontal, 26)
         }
         .frame(maxWidth: .infinity)
-        .overlay(alignment: .leading) { notch.offset(x: -13) }
+        .overlay(alignment: .leading)  { notch.offset(x: -13) }
         .overlay(alignment: .trailing) { notch.offset(x: 13) }
     }
 
-    private var notch: some View { Circle().fill(Theme.paper).frame(width: 26, height: 26) }
+    private var notch: some View { Circle().fill(notchColor).frame(width: 26, height: 26) }
 }
 
 /// A single horizontal line through the middle of its rect (for dashed perforations).

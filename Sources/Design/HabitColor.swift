@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Soft pastel palette for habit sticky-tiles, cards, and the honeycomb.
+/// Soft pastel palette for habit sticky-tiles and cards.
 /// Deliberately only a few gentle hues — no saturated colors anywhere.
 enum HabitColor: String, CaseIterable, Codable, Identifiable {
     case rose, berry, blush, amber, sage, sky, lilac, sand

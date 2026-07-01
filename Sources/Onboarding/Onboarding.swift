@@ -469,7 +469,7 @@ private struct ChallengeDetailStep: View {
     private var testimonials: some View {
         let items: [(handle: String, title: String, body: String)] = [
             ("lily.r", "10/10 recommend", "The aesthetic + the discipline = chef's kiss. On my second round."),
-            ("maya.k", "Obsessed", "The honeycomb of photos keeps me going — day 40 and counting."),
+            ("maya.k", "Obsessed", "The proof photos keep me going — day 40 and counting."),
             ("anna.b", "Actually stuck with it", "First challenge I've ever finished. The widget is everything."),
         ]
         return ScrollView(.horizontal, showsIndicators: false) {

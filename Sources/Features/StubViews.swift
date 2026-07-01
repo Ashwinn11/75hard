@@ -22,7 +22,13 @@ struct FriendsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TabHeader(day: challenge?.currentDay ?? 1) {
+            // Custom header: "Your circle" title on the left, add-friends button on the right.
+            HStack(alignment: .center) {
+                (Text("Your ").font(Font2.serif(28, .semibold)).foregroundColor(Theme.ink)
+                 + Text("circle").font(Font2.serif(28, .semibold)).italic().foregroundColor(accent))
+
+                Spacer()
+
                 if case .ready = social.phase {
                     Button { Haptics.tap(); showAdd = true } label: {
                         Image(systemName: "person.badge.plus")
@@ -45,6 +51,7 @@ struct FriendsView: View {
                         : "Add friends, \(social.incoming.count) requests")
                 }
             }
+            .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 6)
 
             switch social.phase {
             case .unknown:
@@ -104,7 +111,6 @@ struct FriendsView: View {
     private var friendsList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header
                 if social.friends.isEmpty {
                     // No friends yet → the big invite ticket lives here so it's front-and-center.
                     MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent)
@@ -125,12 +131,7 @@ struct FriendsView: View {
         }
         .scrollIndicators(.hidden)
         .refreshable { await social.refresh() }
-    }
-
-    private var header: some View {
-        (Text("Your ").font(Font2.serif(34, .semibold)).foregroundColor(Theme.ink)
-         + Text("circle").font(Font2.serif(34, .semibold)).italic().foregroundColor(accent))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.friends)
     }
 
     private var emptyFriends: some View {
@@ -144,8 +145,6 @@ struct FriendsView: View {
     }
 }
 
-// MARK: - My invite (ticket + share) — shown on the empty state and inside the + sheet
-
 private struct MyInvitePanel: View {
     let name: String
     let code: String?
@@ -153,26 +152,10 @@ private struct MyInvitePanel: View {
     let accent: Color
     var compact: Bool = false
     var body: some View {
-        VStack(spacing: 12) {
-            InviteTicket(name: name, code: code, compact: compact)
-            if let code {
-                ShareLink(item: shareText) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .bold))
-                        Text("Share your code").font(Font2.sans(15, .bold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 13)
-                    .background(accent, in: Capsule())
-                    .shadow(color: accent.opacity(0.3), radius: 8, y: 4)
-                }
-                .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
-                .accessibilityLabel("Share your code \(code)")
-                .ctaWidth()
-            }
-        }
+        InviteTicket(name: name, code: code, compact: compact, shareText: shareText)
     }
 }
+
 
 // MARK: - Friend profile (avatar tap) — bio, their challenge, remove friend
 
@@ -192,7 +175,7 @@ private struct FriendProfileSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
-                    InitialAvatar(name: friend.displayName, photo: friend.photo, accent: accent, size: 112)
+                    InitialAvatar(name: friend.displayName, photo: friend.photo, seed: friend.id, size: 112)
                         .padding(4)
                         .overlay(Circle().stroke(ring, lineWidth: 3))
                         .padding(.top, 12)
@@ -252,27 +235,29 @@ private struct AddFriendsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var social = SocialStore.shared
-    @State private var suggestions: [SuggestedPerson] = []
-    @State private var loading = true
-    @State private var sent: Set<String> = []
-    @State private var message: String?
+    @State private var loading = false
+
+    // The list itself lives in the store, so a declined request or removed friend surfaces here
+    // instantly. A person appears in exactly ONE place: friends → Friends tab, incoming/outgoing →
+    // the Requests screen, everyone else → here. Tapping Add moves them out to Requests on the
+    // spot; canceling there drops them straight back in.
+    private var visibleSuggestions: [SuggestedPerson] {
+        social.suggested.filter { s in
+            !social.friends.contains { $0.id == s.id } &&
+            !social.incoming.contains { $0.id == s.id } &&
+            !social.outgoing.contains { $0.id == s.id }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    if !social.incoming.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("REQUESTS").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
-                            ForEach(social.incoming) { person in
-                                RequestRow(person: person, accent: accent,
-                                    accept: { accept(person) },
-                                    ignore: { Task { await social.ignore(person.id) } })
-                            }
-                            if let message {
-                                Text(message).font(Font2.sans(12, .medium)).foregroundStyle(Theme.rose)
-                            }
+                    if !social.incoming.isEmpty || !social.outgoing.isEmpty {
+                        NavigationLink { RequestsView(accent: accent) } label: {
+                            RequestsNavRow(incoming: social.incoming.count, sent: social.outgoing.count)
                         }
+                        .buttonStyle(PressableStyle())
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -289,25 +274,16 @@ private struct AddFriendsSheet: View {
                             .font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
                     }
 
-                    if !social.outgoing.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("PENDING").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
-                            ForEach(social.outgoing) { person in
-                                PendingRow(person: person, cancel: { Task { await social.remove(person.id) } })
-                            }
-                        }
-                    }
-
                     VStack(alignment: .leading, spacing: 12) {
                         Text("SUGGESTED").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
                         if loading {
                             ProgressView().tint(accent).frame(maxWidth: .infinity).padding(.vertical, 24)
-                        } else if suggestions.isEmpty {
+                        } else if visibleSuggestions.isEmpty {
                             suggestionsEmpty
                         } else {
                             VStack(spacing: 12) {
-                                ForEach(suggestions) { s in
-                                    SuggestionRow(person: s, accent: accent, sent: sent.contains(s.id)) { send(s) }
+                                ForEach(visibleSuggestions) { s in
+                                    SuggestionRow(person: s, accent: accent) { send(s) }
                                 }
                             }
                         }
@@ -319,8 +295,15 @@ private struct AddFriendsSheet: View {
             .background(Theme.paper.ignoresSafeArea())
             .navigationTitle("Add friends").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.outgoing)
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.incoming)
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.suggested)
         }
-        .task { suggestions = await social.suggestions(); loading = false }
+        .task {
+            loading = social.suggested.isEmpty      // show cached list instantly, refresh behind it
+            await social.loadSuggestions()
+            loading = false
+        }
     }
 
     private var suggestionsEmpty: some View {
@@ -333,8 +316,98 @@ private struct AddFriendsSheet: View {
     }
 
     private func send(_ s: SuggestedPerson) {
-        Haptics.success(); sent.insert(s.id)
-        Task { try? await social.accept(PersonRef(id: s.id, name: s.name)) }
+        Haptics.success()
+        Task { try? await social.accept(PersonRef(id: s.id, name: s.name, bio: s.bio, photo: s.photo)) }
+    }
+}
+
+// MARK: - Requests (new + sent) — its own screen, pushed from the add sheet
+
+private struct RequestsNavRow: View {
+    let incoming: Int
+    let sent: Int
+
+    private var subtitle: String {
+        var parts: [String] = []
+        if incoming > 0 { parts.append("\(incoming) new") }
+        if sent > 0 { parts.append("\(sent) sent") }
+        return parts.isEmpty ? "All caught up" : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "envelope")
+                .font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink)
+                .frame(width: 44, height: 44).background(Theme.chipFill, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Requests").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
+                Text(subtitle).font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 8)
+            if incoming > 0 {
+                Text("\(incoming)")
+                    .font(Font2.sans(12, .heavy)).foregroundStyle(.white)
+                    .frame(minWidth: 22, minHeight: 22)
+                    .padding(.horizontal, incoming > 9 ? 4 : 0)
+                    .background(Theme.rose, in: Capsule())
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink.opacity(0.3))
+        }
+        .padding(14).background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
+    }
+}
+
+private struct RequestsView: View {
+    let accent: Color
+    @State private var social = SocialStore.shared
+    @State private var message: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                if social.incoming.isEmpty && social.outgoing.isEmpty {
+                    empty
+                }
+                if !social.incoming.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("NEW").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        ForEach(social.incoming) { person in
+                            RequestRow(person: person, accent: accent,
+                                accept: { accept(person) },
+                                ignore: { Task { await social.ignore(person.id) } })
+                        }
+                        if let message {
+                            Text(message).font(Font2.sans(12, .medium)).foregroundStyle(Theme.rose)
+                        }
+                    }
+                }
+                if !social.outgoing.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("SENT").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        ForEach(social.outgoing) { person in
+                            PendingRow(person: person, cancel: { Task { await social.remove(person.id) } })
+                        }
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.paper.ignoresSafeArea())
+        .navigationTitle("Requests").navigationBarTitleDisplayMode(.inline)
+        .refreshable { await social.refresh() }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.incoming)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.outgoing)
+    }
+
+    private var empty: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "tray").font(.system(size: 26, weight: .light)).foregroundStyle(accent)
+            Text("No requests right now.").font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 24).softCard()
     }
 
     private func accept(_ person: PersonRef) {
@@ -346,45 +419,28 @@ private struct AddFriendsSheet: View {
     }
 }
 
+// Just photo · name · bio — the match scoring only drives the RANKING, it isn't shown.
+// No "Sent" state: adding someone moves them out of this list and into Requests.
 private struct SuggestionRow: View {
     let person: SuggestedPerson
     let accent: Color
-    let sent: Bool
     let onAdd: () -> Void
-
-    // A short "why we're suggesting them" line — match reasons in accent, else their challenge.
-    private var matchReason: (text: String, highlight: Bool)? {
-        var parts: [String] = []
-        if person.sameChallenge { parts.append("Same challenge") }
-        parts.append(contentsOf: person.sharedTags)
-        if !parts.isEmpty { return (parts.prefix(2).joined(separator: " · "), true) }
-        if !person.challengeTitle.isEmpty { return ("On \(person.challengeTitle)", false) }
-        return nil
-    }
 
     var body: some View {
         HStack(spacing: 14) {
-            InitialAvatar(name: person.displayName, photo: person.photo, accent: accent)
+            InitialAvatar(name: person.displayName, photo: person.photo, seed: person.id)
             VStack(alignment: .leading, spacing: 3) {
                 Text(person.displayName).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink).lineLimit(1)
                 if !person.bio.isEmpty {
                     Text(person.bio).font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary).lineLimit(2)
                 }
-                if let reason = matchReason {
-                    Text(reason.text)
-                        .font(Font2.sans(11, .bold))
-                        .foregroundStyle(reason.highlight ? accent : Theme.textSecondary)
-                        .lineLimit(1)
-                }
             }
             Spacer(minLength: 8)
             Button(action: onAdd) {
-                Text(sent ? "Sent" : "Add").font(Font2.sans(13, .bold))
-                    .foregroundStyle(sent ? Theme.textSecondary : .white)
+                Text("Add").font(Font2.sans(13, .bold)).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(sent ? AnyShapeStyle(Theme.chipFill) : AnyShapeStyle(accent), in: Capsule())
+                    .background(accent, in: Capsule())
             }
-            .disabled(sent)
         }
         .padding(14).background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
@@ -437,7 +493,7 @@ private struct AddFriendField: View {
                 // Same card as a suggestion — avatar, name, bio — so a looked-up code
                 // reads as a real profile before you send the request.
                 SuggestionRow(person: SuggestedPerson(id: found.id, name: found.name, bio: found.bio, photo: found.photo),
-                              accent: accent, sent: false) { send(found) }
+                              accent: accent) { send(found) }
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: found?.id)
@@ -485,7 +541,7 @@ private struct FriendRow: View {
         HStack(alignment: .top, spacing: 16) {
             Button { Haptics.tap(); onTapAvatar() } label: {
                 VStack(spacing: 8) {
-                    InitialAvatar(name: friend.displayName, photo: friend.photo, accent: accent, size: 68)
+                    InitialAvatar(name: friend.displayName, photo: friend.photo, seed: friend.id, size: 68)
                         .padding(3)
                         .overlay(Circle().stroke(ring, lineWidth: 2.5))
                     VStack(spacing: 1) {
@@ -542,7 +598,7 @@ private struct RequestRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            InitialAvatar(name: person.displayName, photo: person.photo, accent: accent)
+            InitialAvatar(name: person.displayName, photo: person.photo, seed: person.id)
             VStack(alignment: .leading, spacing: 2) {
                 Text(person.displayName).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink).lineLimit(1)
                 Text("wants to be friends").font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
@@ -568,7 +624,7 @@ private struct PendingRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            InitialAvatar(name: person.displayName, photo: person.photo, accent: Theme.taupe)
+            InitialAvatar(name: person.displayName, photo: person.photo, seed: person.id)
             VStack(alignment: .leading, spacing: 2) {
                 Text(person.displayName).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink).lineLimit(1)
                 Text("request sent").font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
@@ -591,14 +647,25 @@ struct InitialAvatar: View {
     let name: String
     var photo: Data? = nil
     var accent: Color = Theme.sage
+    var seed: String? = nil          // stable identity (userID) → same color for a person everywhere
     var size: CGFloat = 48
     private var initial: String { name.first.map { String($0).uppercased() } ?? "?" }
+
+    private var color: Color {
+        guard let seed else { return accent }
+        // Deterministic hash (String.hashValue is randomized per launch) → fixed palette pick.
+        var h = 5381
+        for b in seed.utf8 { h = (h &* 33) &+ Int(b) }
+        let palette = [Theme.coral, Theme.periwinkle, Theme.sage, Theme.orchid, Theme.taupe]
+        return palette[abs(h) % palette.count]
+    }
+
     var body: some View {
         ZStack {
             if let photo, let ui = UIImage(data: photo) {
                 Image(uiImage: ui).resizable().scaledToFill()
             } else {
-                LinearGradient(colors: [accent.opacity(0.9), accent], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(colors: [color.opacity(0.9), color], startPoint: .topLeading, endPoint: .bottomTrailing)
                 Text(initial).font(Font2.serif(size * 0.5, .semibold)).foregroundStyle(.white)
             }
         }
