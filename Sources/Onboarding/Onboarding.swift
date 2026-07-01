@@ -41,7 +41,7 @@ struct OnboardingFlow: View {
     @Environment(\.modelContext) private var context
     @State private var model = OnboardingModel()
     @State private var step = 0
-    private let last = 15
+    private let last = 14
 
     var body: some View {
         ZStack {
@@ -96,9 +96,8 @@ struct OnboardingFlow: View {
         case 9:  StartDateStep(model: model, onNext: next)
         case 10: LengthStep(model: model, onNext: next)
         case 11: LoadingStep(onNext: next)
-        case 12: HoneycombShareStep(model: model, onNext: next)
-        case 13: ReadyStep(model: model, onNext: next)
-        case 14: SignPromiseStep(onNext: next)
+        case 12: ReadyStep(model: model, onNext: next)
+        case 13: SignPromiseStep(onNext: next)
         default: PaywallStep(model: model, onStart: finish)
         }
     }
@@ -158,14 +157,12 @@ private struct WelcomeStep: View {
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(.white, in: Capsule()).shadow(color: .black.opacity(0.1), radius: 8, y: 4).padding(.top, 6)
             }
-            Spacer(minLength: 18)
-            TypewriterHeadline(lead: "Become", accent: "that Girl", size: 44, accentColor: Theme.rose, alignment: .center)
-                .padding(.horizontal, 20)
-            Spacer(minLength: 20)
-            ctaPad(VStack(spacing: 14) {
+            Spacer()
+            OnbBottomCard {
+                TypewriterHeadline(lead: "Become", accent: "that Girl", size: 40, accentColor: Theme.rose, alignment: .center)
                 PrimaryButton(title: "Let's do this", action: onNext)
                 Text("Already have an account?").font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.55)).underline()
-            })
+            }
         }
     }
 }
@@ -536,12 +533,8 @@ private struct LengthStep: View {
         VStack(spacing: 0) {
             TypewriterHeadline(lead: "How long is your", accent: "challenge?", size: 30, accentColor: Theme.rose, alignment: .center).padding(.top, 6)
             Spacer()
-            VStack(spacing: 0) {
-                Text("\(model.lengthDays)").font(Font2.sans(78, .heavy)).foregroundStyle(Theme.ink)
-                    .contentTransition(.numericText())                 // odometer
-                    .animation(.snappy(duration: 0.25), value: model.lengthDays)
-                Text("days").font(Font2.sans(17, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
-            }
+            RulerSlider(value: $model.lengthDays, range: 1...75, unit: "days", accent: Theme.sage)
+                .padding(.horizontal, 16)
             HStack(spacing: 10) {
                 ForEach(presets, id: \.self) { p in
                     Button { withAnimation { model.lengthDays = p }; Haptics.select() } label: {
@@ -559,9 +552,7 @@ private struct LengthStep: View {
                 .background(presets.contains(model.lengthDays) ? AnyShapeStyle(Color.white) : AnyShapeStyle(Theme.ink), in: Capsule())
                 .overlay(Capsule().stroke(Theme.ring, lineWidth: presets.contains(model.lengthDays) ? 1.5 : 0))
                 .padding(.horizontal, 30).padding(.top, 10)
-            Slider(value: Binding(get: { Double(model.lengthDays) }, set: { model.lengthDays = Int($0.rounded()) }), in: 1...75, step: 1)
-                .tint(Theme.sage).padding(.horizontal, 30).padding(.top, 16)
-            Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 6)
+            Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
             Spacer()
             ctaPad(PrimaryButton(title: "Continue", color: Theme.taupe, action: onNext))
         }
@@ -628,31 +619,7 @@ private struct LoadingStep: View {
     }
 }
 
-// MARK: - 12 Honeycomb (shareable proof grid)
-
-private struct HoneycombShareStep: View {
-    @Bindable var model: OnboardingModel
-    var onNext: () -> Void
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 16)
-            HiveComb(color: .rose, cells: Array(repeating: .sample, count: model.lengthDays),
-                     width: 300, visibleCells: model.lengthDays)
-                .frame(maxWidth: .infinity)
-            Spacer(minLength: 18)
-            VStack(spacing: 8) {
-                TypewriterHeadline(lead: "Proof worth", accent: "sharing", size: 34, accentColor: Theme.coral, alignment: .center)
-                Text("A proof photo each day fills your hive. By day \(model.lengthDays) you'll have a sticker worth posting.")
-                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.55))
-                    .multilineTextAlignment(.center).padding(.horizontal, 36)
-            }
-            Spacer()
-            ctaPad(PrimaryButton(title: "Love it", color: Theme.coral, action: onNext))
-        }
-    }
-}
-
-// MARK: - 13 Ready / your plan (the sticker card, like 1505)
+// MARK: - 12 Ready / your plan (the sticker card, like 1505)
 
 private struct ReadyStep: View {
     @Bindable var model: OnboardingModel

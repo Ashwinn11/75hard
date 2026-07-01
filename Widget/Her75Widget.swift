@@ -59,7 +59,7 @@ struct Her75WidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                HiveHex(color: .rose, width: 16)
+                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.rose).frame(width: 14, height: 14)
                 Text("Day \(entry.day) · \(entry.track)")
                     .font(Font2.sans(12, .bold))
                     .foregroundStyle(Theme.ink)
@@ -72,26 +72,23 @@ struct Her75WidgetView: View {
                     .font(Font2.sans(12, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
                 Spacer()
             } else {
-                let shown = Array(entry.missions.prefix(4))
-                let w: CGFloat = shown.count <= 2 ? 84 : shown.count == 3 ? 76 : 70
-                HStack(spacing: -w * 0.18) {
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { i, m in
+                HStack(spacing: 8) {
+                    ForEach(Array(entry.missions.prefix(4))) { m in
                         Button(intent: ToggleMissionIntent(habitID: m.id)) {
-                            HiveHex(colors: m.color.stops, width: w) {
-                                VStack(spacing: 1) {
-                                    Image(systemName: m.done ? "checkmark" : "circle")
-                                        .font(.system(size: w * 0.18, weight: .bold))
-                                    Text(m.title)
-                                        .font(Font2.sans(w * 0.13, .bold))
-                                        .lineLimit(1).minimumScaleFactor(0.7)
-                                        .padding(.horizontal, 4)
-                                }
-                                .foregroundStyle(m.color.onColor)
+                            VStack(spacing: 6) {
+                                Image(systemName: m.done ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 18, weight: .bold))
+                                Text(m.title)
+                                    .font(Font2.sans(11, .bold))
+                                    .lineLimit(2).minimumScaleFactor(0.7).multilineTextAlignment(.center)
                             }
+                            .foregroundStyle(m.color.onColor)
+                            .frame(maxWidth: .infinity).frame(height: 78)
+                            .padding(6)
+                            .background(m.color.gradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .opacity(m.done ? 1 : 0.9)
                         }
                         .buttonStyle(.plain)
-                        .offset(y: i % 2 == 0 ? -w * 0.08 : w * 0.08)
-                        .zIndex(Double(i))
                     }
                 }
                 .frame(maxWidth: .infinity)

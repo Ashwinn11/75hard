@@ -7,6 +7,7 @@ struct ProfileView: View {
     @Query(sort: \Challenge.createdAt, order: .reverse) private var challenges: [Challenge]
     @State private var showRestart = false
     @State private var photoItem: PhotosPickerItem?
+    @State private var showPicker = false
     private var challenge: Challenge? { challenges.first }
 
     var body: some View {
@@ -22,7 +23,7 @@ struct ProfileView: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        statsCard(c)
+                        challengeSection(c)
                         nameEditor(c)
                         remindersCard
                         restartButton
@@ -51,6 +52,35 @@ struct ProfileView: View {
                 }
             }
         }
+        .sheet(isPresented: $showPicker) {
+            if let c = challenge {
+                ChallengePickerSheet(current: c.track) { switchChallenge(c, to: $0) }
+            }
+        }
+    }
+
+    // The selected challenge as a card; tap → all challenges (like onboarding).
+    private func challengeSection(_ c: Challenge) -> some View {
+        Button { showPicker = true } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                EyebrowLabel(text: "Your challenge", color: Theme.ink.opacity(0.45))
+                ChallengeStripCard(track: c.track)
+            }
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    private func switchChallenge(_ c: Challenge, to t: ChallengeTrack) {
+        c.trackRaw = t.rawValue
+        c.lengthDays = t.defaultDays
+        for h in c.habits { context.delete(h) }
+        for (i, seed) in t.defaultHabits.enumerated() {
+            let h = Habit(seed: seed, order: i)
+            h.challenge = c
+            context.insert(h)
+        }
+        try? context.save()
+        Haptics.success()
     }
 
     private func headerCard(_ c: Challenge) -> some View {
@@ -73,26 +103,6 @@ struct ProfileView: View {
         }
     }
 
-    private func statsCard(_ c: Challenge) -> some View {
-        HStack(spacing: 0) {
-            stat("\(c.currentStreak)", "streak")
-            divider
-            stat("\(captured(c))", "captured")
-            divider
-            stat("\(Int((overall(c) * 100).rounded()))%", "complete")
-        }
-        .padding(.vertical, 18)
-        .background(Theme.roseGradient, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-        .shadow(color: Theme.rose.opacity(0.3), radius: 16, y: 8)
-    }
-    private func stat(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value).font(Font2.sans(26, .heavy)).foregroundStyle(.white)
-            Text(label).font(Font2.sans(11, .bold)).foregroundStyle(.white.opacity(0.85))
-        }.frame(maxWidth: .infinity)
-    }
-    private var divider: some View { Rectangle().fill(.white.opacity(0.25)).frame(width: 1, height: 34) }
-
     private func nameEditor(_ c: Challenge) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             EyebrowLabel(text: "Your name", color: Theme.ink.opacity(0.45))
@@ -107,14 +117,9 @@ struct ProfileView: View {
 
     private var remindersCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            EyebrowLabel(text: "Soft check-ins", color: Theme.ink.opacity(0.45))
-            VStack(spacing: 0) {
-                ForEach(Array(ReminderSlot.allCases.enumerated()), id: \.element.id) { i, slot in
-                    ReminderRow(slot: slot)
-                    if i < ReminderSlot.allCases.count - 1 { Divider().padding(.leading, 14) }
-                }
-            }
-            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            EyebrowLabel(text: "Notifications", color: Theme.ink.opacity(0.45))
+            ReminderRow(slot: .morning, title: "Daily reminder")
+                .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 
@@ -128,21 +133,6 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: data
-    private func captured(_ c: Challenge) -> Int {
-        let p = c.photoHabit
-        return c.transformationCells(photoHabit: p).filter {
-            if case .empty = $0 { return false }; if case .camera = $0 { return false }; return true
-        }.count
-    }
-    private func overall(_ c: Challenge) -> Double {
-        let habits = c.habitsOrdered
-        guard !habits.isEmpty, c.currentDay > 0 else { return 0 }
-        let possible = habits.count * c.currentDay
-        let done = habits.reduce(0) { $0 + $1.completions.count }
-        return possible == 0 ? 0 : min(1, Double(done) / Double(possible))
-    }
-
     private func restart() {
         if let c = challenge { context.delete(c); try? context.save() }
         for slot in ReminderSlot.allCases { Reminders.cancel(slot) }
@@ -154,41 +144,25 @@ struct ProfileView: View {
 
 private struct ReminderRow: View {
     let slot: ReminderSlot
+    let title: String
     @AppStorage private var on: Bool
-    @AppStorage private var minutes: Int
 
-    init(slot: ReminderSlot) {
+    init(slot: ReminderSlot, title: String) {
         self.slot = slot
+        self.title = title
         _on = AppStorage(wrappedValue: false, "rem.\(slot.rawValue).on")
-        let def = (slot.defaultTime.hour ?? 8) * 60 + (slot.defaultTime.minute ?? 0)
-        _minutes = AppStorage(wrappedValue: def, "rem.\(slot.rawValue).min")
-    }
-
-    private var time: Binding<Date> {
-        Binding(
-            get: {
-                Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
-            },
-            set: {
-                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
-                minutes = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-                if on { Reminders.schedule(slot, at: DateComponents(hour: c.hour, minute: c.minute)) }
-            })
     }
 
     var body: some View {
         HStack {
-            Text(slot.title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
+            Text(title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
             Spacer()
-            if on {
-                DatePicker("", selection: time, displayedComponents: .hourAndMinute).labelsHidden()
-            }
             Toggle("", isOn: Binding(get: { on }, set: { newValue in
                 on = newValue
                 if newValue {
                     Task {
                         _ = await Reminders.requestAuth()
-                        Reminders.schedule(slot, at: DateComponents(hour: minutes / 60, minute: minutes % 60))
+                        Reminders.schedule(slot, at: slot.defaultTime)
                     }
                 } else {
                     Reminders.cancel(slot)
@@ -196,5 +170,71 @@ private struct ReminderRow: View {
             })).labelsHidden().tint(Theme.rose)
         }
         .padding(14)
+    }
+}
+
+// MARK: - Challenge card (onboarding photo-strip style) + picker
+
+struct ChallengeStripCard: View {
+    let track: ChallengeTrack
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .top) {
+                HStack(spacing: 3) {
+                    ForEach(Array(track.photos.enumerated()), id: \.offset) { i, p in
+                        PhotoFill(name: p, fallback: HabitColor.palette[(abs(track.rawValue.hashValue) + i) % HabitColor.palette.count].gradient)
+                            .frame(maxWidth: .infinity).frame(height: 108).clipped()
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                if !track.joined.isEmpty {
+                    Text(track.joined).font(Font2.sans(11, .bold)).foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(.white, in: Capsule())
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
+                }
+            }
+            Text(track.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
+        }
+    }
+}
+
+struct ChallengePickerSheet: View {
+    let current: ChallengeTrack
+    var onSelect: (ChallengeTrack) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var pending: ChallengeTrack?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    ForEach(ChallengeTrack.catalog) { t in
+                        Button { t == current ? dismiss() : (pending = t) } label: {
+                            ChallengeStripCard(track: t)
+                                .overlay(alignment: .topTrailing) {
+                                    if t == current {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 24)).foregroundStyle(Theme.coral)
+                                            .background(Circle().fill(.white)).padding(8)
+                                    }
+                                }
+                        }
+                        .buttonStyle(PressableStyle())
+                    }
+                }
+                .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 28)
+            }
+            .her75Background()
+            .navigationTitle("Choose your challenge")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .alert("Switch challenge?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
+                Button("Cancel", role: .cancel) { pending = nil }
+                Button("Switch", role: .destructive) { if let t = pending { onSelect(t) }; dismiss() }
+            } message: {
+                Text("This replaces your current tasks with \(pending?.title ?? "the new challenge")'s and resets their progress. Your day count and start date stay.")
+            }
+        }
     }
 }

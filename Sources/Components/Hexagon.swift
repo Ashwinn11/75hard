@@ -210,3 +210,82 @@ struct HiveComb: View {
         }
     }
 }
+
+// MARK: - GrowingHive
+// A TIGHT honeycomb of exactly N hexes — one per logged day (+ an optional "log today" cell).
+// Day 1 = 1 hex, day 2 = 2 hexes, growing ring by ring. No blob, no empty padding; the cluster
+// is sized to its contents and the hexes shrink so the whole thing stays within `maxWidth`.
+struct GrowingHive: View {
+    var color: HabitColor
+    var cells: [CombCell]                 // logged hexes (+ optional .camera) — no empties
+    var maxWidth: CGFloat = 240
+    var maxHeight: CGFloat = 240
+    var maxHexWidth: CGFloat = 150
+    private static let s3: CGFloat = 1.7320508
+
+    private static func rings(_ n: Int) -> Int {
+        var r = 0
+        while 1 + 3 * r * (r + 1) < n { r += 1 }
+        return r
+    }
+    private static func layout(_ n: Int) -> [(q: Int, r: Int)] {
+        var out: [(Int, Int)] = [(0, 0)]
+        let R = rings(n)
+        if R >= 1 {
+            // CCW spiral starting at the East corner → horizontal-first growth:
+            // n=2 is a side-by-side pair, n=4 is a 2×2 block, then it keeps packing.
+            let steps = [(0, -1), (-1, 0), (-1, 1), (0, 1), (1, 0), (1, -1)]
+            for k in 1...R {
+                var q = k, r = 0
+                for i in 0..<6 { for _ in 0..<k { out.append((q, r)); q += steps[i].0; r += steps[i].1 } }
+            }
+        }
+        return Array(out.prefix(n))
+    }
+
+    var body: some View {
+        let n = max(cells.count, 1)
+        let coords = Self.layout(n)
+        let centers = coords.map { CGPoint(x: Self.s3 * (CGFloat($0.q) + CGFloat($0.r) / 2), y: 1.5 * CGFloat($0.r)) }
+        let minX = centers.map(\.x).min() ?? 0, maxX = centers.map(\.x).max() ?? 0
+        let minY = centers.map(\.y).min() ?? 0, maxY = centers.map(\.y).max() ?? 0
+        let unitW = (maxX - minX) + Self.s3                          // total width in circumradius units
+        let unitH = (maxY - minY) + 2                                // total height in circumradius units
+        let cs = min(maxHexWidth / Self.s3, maxWidth / unitW, maxHeight / unitH)   // circumradius in points
+        let hexW = Self.s3 * cs, hexH = 2 * cs
+        return ZStack {
+            ForEach(0..<n, id: \.self) { i in
+                cell(cells.indices.contains(i) ? cells[i] : .empty, w: hexW, h: hexH)
+                    .position(x: (centers[i].x - minX) * cs + hexW / 2,
+                              y: (centers[i].y - minY) * cs + hexH / 2)
+            }
+        }
+        .frame(width: (maxX - minX) * cs + hexW, height: (maxY - minY) * cs + hexH)
+    }
+
+    @ViewBuilder private func cell(_ c: CombCell, w: CGFloat, h: CGFloat) -> some View {
+        let corner = max(2, w * 0.14)
+        switch c {
+        case .photo(let data):
+            ZStack {
+                RoundedHexagon(cornerRadius: corner).fill(Color.black.opacity(0.85))
+                if let img = ImageProcessing.thumbnail(data, maxPixel: w * 3) {
+                    Image(uiImage: img).resizable().scaledToFill().frame(width: w, height: h)
+                        .clipShape(RoundedHexagon(cornerRadius: corner))
+                }
+            }.frame(width: w, height: h)
+        case .logged:
+            ZStack {
+                RoundedHexagon(cornerRadius: corner).fill(color.gradient)
+                Image(systemName: "checkmark").font(.system(size: max(8, w * 0.3), weight: .semibold)).foregroundStyle(.white.opacity(0.95))
+            }.frame(width: w, height: h)
+        case .camera:
+            ZStack {
+                RoundedHexagon(cornerRadius: corner).fill(color.stops[0].opacity(0.5))
+                Image(systemName: "plus").font(.system(size: max(10, w * 0.34), weight: .bold)).foregroundStyle(color.onColor)
+            }.frame(width: w, height: h)
+        default:
+            RoundedHexagon(cornerRadius: corner).fill(color.stops[0].opacity(0.25)).frame(width: w, height: h)
+        }
+    }
+}

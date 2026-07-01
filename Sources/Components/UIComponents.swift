@@ -104,3 +104,73 @@ struct PressableStyle: ButtonStyle {
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
+
+// MARK: - Weight-scale ruler slider — drag the ticks under a fixed needle
+
+struct RulerSlider: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var caption: String = ""
+    var unit: String = ""
+    var accent: Color = Theme.coral
+    var tickSpacing: CGFloat = 14
+    var showValue: Bool = true
+    var showLabels: Bool = true
+
+    @State private var anchor: Int? = nil   // value captured at drag start
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if showValue {
+                if !caption.isEmpty {
+                    Text(caption).font(Font2.sans(11, .bold)).tracking(2).foregroundStyle(Theme.ink.opacity(0.4))
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text("\(value)")
+                        .font(Font2.sans(58, .heavy)).foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.2), value: value)
+                    if !unit.isEmpty {
+                        Text(unit).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink.opacity(0.5))
+                    }
+                }
+            }
+            GeometryReader { geo in
+                let mid = geo.size.width / 2
+                Canvas { ctx, size in
+                    for v in range {
+                        let x = mid + CGFloat(v - value) * tickSpacing
+                        guard x >= -2, x <= size.width + 2 else { continue }
+                        let major = v % 5 == 0
+                        let h: CGFloat = major ? 24 : 13
+                        var p = Path()
+                        p.move(to: CGPoint(x: x, y: 28))
+                        p.addLine(to: CGPoint(x: x, y: 28 + h))
+                        ctx.stroke(p, with: .color(Theme.ink.opacity(major ? 0.45 : 0.18)), lineWidth: major ? 2 : 1)
+                        if major && showLabels {
+                            ctx.draw(Text("\(v)").font(.system(size: 11, weight: .bold)).foregroundColor(Theme.ink.opacity(0.4)),
+                                     at: CGPoint(x: x, y: 64))
+                        }
+                    }
+                }
+                .overlay(alignment: .top) {
+                    RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 3, height: 30).offset(y: 26)
+                }
+                .mask(LinearGradient(colors: [.clear, .black, .black, .black, .clear], startPoint: .leading, endPoint: .trailing))
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { g in
+                            let base = anchor ?? value
+                            if anchor == nil { anchor = value }
+                            let delta = Int((g.translation.width / tickSpacing).rounded())
+                            let nv = min(max(base - delta, range.lowerBound), range.upperBound)
+                            if nv != value { value = nv; Haptics.select() }
+                        }
+                        .onEnded { _ in anchor = nil }
+                )
+            }
+            .frame(height: showLabels ? 78 : 44)
+        }
+    }
+}
