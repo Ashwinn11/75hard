@@ -57,7 +57,7 @@ struct OnboardingFlow: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            if step >= 1 && step != loadingStep {   // loading has no back
+            if step >= 1 && step != loadingStep && step != last {   // loading + paywall own their nav
                 Button { back() } label: {
                     Image(systemName: "chevron.left").font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Theme.ink).frame(width: 38, height: 38)
@@ -100,7 +100,8 @@ struct OnboardingFlow: View {
         case 14: LoadingStep(onNext: next)
         case 15: ReadyStep(model: model, onNext: next)
         case 16: SignPromiseStep(onNext: next)
-        default: PaywallView(days: model.lengthDays, onUnlocked: finish)
+        default: PaywallView(days: model.lengthDays, onUnlocked: finish,
+                             onClose: { skip(to: 15) })   // Close → the plan preview (ReadyStep)
         }
     }
 

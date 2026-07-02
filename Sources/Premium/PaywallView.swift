@@ -6,79 +6,103 @@ import SwiftUI
 struct PaywallView: View {
     var days: Int = 75
     var onUnlocked: () -> Void
+    /// Onboarding passes this so Close returns to the plan preview (state persists in the
+    /// OnboardingModel). RootGate leaves it nil — a lapsed subscriber can't dismiss into the app.
+    var onClose: (() -> Void)? = nil
 
     @State private var premium = Premium.shared
     @State private var selectedID: String?
     @State private var busy = false
-    @State private var message: String?
-    @State private var restoreMessage: String?
+    @State private var notice: Notice?
     @State private var legal: LegalView.Kind?
     @State private var didUnlock = false
+    @State private var ctaFlip = false      // alternates the CTA vision ↔ price
+
+    /// Cycles the CTA between the aspirational line and the (Apple-required) price + period.
+    private let ctaTimer = Timer.publish(every: 2.4, on: .main, in: .common).autoconnect()
+
+    /// A one-off alert for a purchase / restore outcome (shown, tapped away, gone).
+    private struct Notice: Identifiable { let id = UUID(); let title: String; let message: String }
 
     private var selected: Premium.Plan? {
         premium.plans.first { $0.id == selectedID } ?? premium.plans.first
     }
 
+    /// Sell the vision, then disclose the price — the button crossfades between the two.
+    /// Price + period ride along in `Plan.price` ("$4.99/week"), and the plan rows show it
+    /// persistently too, so the alternating button stays App Store compliant.
+    private var ctaTitle: String {
+        if busy { return "One sec…" }
+        guard let p = selected else { return "Start the journey" }
+        return ctaFlip ? "Start for \(p.price)" : "Become her"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 10) {
-                    VStack(spacing: 2) {
-                        Text("Become Her in \(days) days")
-                            .font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
-                        Text("Everything unlocked, every day")
-                            .font(Font2.serif(26, .semibold)).foregroundStyle(Theme.ink)
-                    }
-                    .multilineTextAlignment(.center).padding(.top, 10)
+            // Hero — vertically centered in the space above the footer.
+            VStack(spacing: 20) {
+                SocialProofCluster()
+                VStack(spacing: 2) {
+                    Text("Become Her in \(days) days")
+                        .font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
+                    Text("Everything unlocked, every day")
+                        .font(Font2.serif(26, .semibold)).foregroundStyle(Theme.ink)
+                }
+                .multilineTextAlignment(.center)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(["Daily missions & proof photos",
-                                 "Your honeycomb progress grid",
-                                 "Friends & accountability"], id: \.self) { b in
-                            Label(b, systemImage: "checkmark.circle.fill")
-                                .font(Font2.sans(14, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
-                        }
-                    }
-                    .padding(.top, 12)
-
-                    plansSection.padding(.top, 16)
-
-                    if let message {
-                        Text(message)
-                            .font(Font2.sans(12, .medium)).foregroundStyle(Theme.rose)
-                            .multilineTextAlignment(.center).padding(.top, 6)
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(["Become the woman who follows through",
+                             "End each day proud you showed up",
+                             "Watch yourself transform, day by day",
+                             "Rise with women who won't let you quit"], id: \.self) { b in
+                        Label(b, systemImage: "checkmark.circle.fill")
+                            .font(Font2.sans(14, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
                     }
                 }
-                .padding(.horizontal, 22)
             }
-            .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 30)
 
-            ctaPad(VStack(spacing: 10) {
-                PrimaryButton(title: busy ? "One sec…" : "Become Her", color: Theme.mauve) { buy() }
-                    .shimmerOnce(delay: 0.8)
-                    .disabled(busy || selected == nil)
-                    .opacity(selected == nil ? 0.5 : 1)
-                Text("Auto-renews until canceled. Cancel anytime in the App Store.")
-                    .font(Font2.sans(11, .medium)).foregroundStyle(Theme.ink.opacity(0.35))
-                HStack(spacing: 18) {
-                    Button("Terms") { legal = .terms }
-                    Button("Restore") { restore() }
-                    Button("Privacy") { legal = .privacy }
-                }
-                .font(Font2.sans(11, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
-            })
-            .padding(.top, 8)
+            // Footer — plans + CTA anchored at the bottom.
+            VStack(spacing: 14) {
+                plansSection.padding(.horizontal, 22)
+                ctaPad(VStack(spacing: 10) {
+                    PrimaryButton(title: ctaTitle, color: Theme.mauve) { buy() }
+                        .contentTransition(.opacity)
+                        .animation(.easeInOut(duration: 0.45), value: ctaTitle)
+                        .onReceive(ctaTimer) { _ in if !busy { ctaFlip.toggle() } }
+                        .shimmerOnce(delay: 0.8)
+                        .disabled(busy || selected == nil)
+                        .opacity(selected == nil ? 0.5 : 1)
+                    Text("Cancel anytime. Secure checkout")
+                        .font(Font2.sans(11, .medium)).foregroundStyle(Theme.ink.opacity(0.35))
+                    HStack(spacing: 18) {
+                        Button("Terms") { legal = .terms }
+                        Button("Restore") { restore() }
+                        Button("Privacy") { legal = .privacy }
+                    }
+                    .font(Font2.sans(11, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
+                })
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if let onClose {
+                CircleIconButton(icon: "xmark") { onClose() }
+                    .padding(.top, 8).padding(.trailing, 18)
+            }
         }
         .task {
-            if premium.isPremium { unlock() }               // already subscribed (reinstall) — skip the ask
             if premium.plans.isEmpty { await premium.loadPlans() }
         }
+        // Never auto-skip: the paywall is a fixed onboarding step, whatever the premium status.
+        // Already-subscribed users (reinstall / active sub) pass by tapping Restore, which flips
+        // isPremium and unlocks here. A fresh purchase unlocks the same way.
         .onChange(of: premium.isPremium) { _, now in if now { unlock() } }
-        .alert("Restore purchases", isPresented: Binding(
-            get: { restoreMessage != nil }, set: { if !$0 { restoreMessage = nil } })) {
-            Button("OK") { restoreMessage = nil }
+        .alert(notice?.title ?? "", isPresented: Binding(
+            get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+            Button("OK") { notice = nil }
         } message: {
-            Text(restoreMessage ?? "")
+            Text(notice?.message ?? "")
         }
         .sheet(item: $legal) { k in
             NavigationStack { LegalView(kind: k) }
@@ -143,12 +167,13 @@ struct PaywallView: View {
 
     private func buy() {
         guard let plan = selected, !busy else { return }
-        busy = true; message = nil
+        busy = true; notice = nil
         Task {
             do {
                 if try await premium.purchase(plan) { Haptics.success(); unlock() }
             } catch {
-                message = "The purchase didn't go through — you weren't charged. Try again."
+                notice = Notice(title: "Payment failed",
+                                message: "The purchase didn't go through — you weren't charged. Please try again.")
             }
             busy = false
         }
@@ -156,10 +181,12 @@ struct PaywallView: View {
 
     private func restore() {
         guard !busy else { return }
-        busy = true; message = nil
+        busy = true; notice = nil
         Task {
             let (restored, msg) = await premium.restoreOutcome()
-            if restored { Haptics.success(); unlock() } else { restoreMessage = msg }
+            if restored { Haptics.success(); unlock() }
+            else { notice = Notice(title: "Restore purchases",
+                                   message: msg ?? "No active subscription found on this Apple ID.") }
             busy = false
         }
     }
@@ -169,6 +196,32 @@ struct PaywallView: View {
         guard !didUnlock else { return }
         didUnlock = true
         onUnlocked()
+    }
+}
+
+/// Social proof: a row of overlapping member photos with a floating "Join N women" pill,
+/// shown above the paywall headline. Photos fall back to soft gradients if the assets are absent.
+private struct SocialProofCluster: View {
+    private let photos = ["onb_g4", "onb_g8", "onb_g11", "onb_g14"]
+    var count: String = "1,000+"
+
+    var body: some View {
+        VStack(spacing: -18) {                       // the pill floats over the photos' lower edge
+            HStack(spacing: -20) {                   // overlapping avatars
+                ForEach(Array(photos.enumerated()), id: \.offset) { _, name in
+                    PhotoFill(name: name)
+                        .frame(width: 62, height: 62)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white, lineWidth: 3))
+                        .shadow(color: .black.opacity(0.10), radius: 4, y: 2)
+                }
+            }
+            Text("Join \(count) women")
+                .font(Font2.sans(15, .heavy)).foregroundStyle(Theme.ink)
+                .padding(.horizontal, 20).padding(.vertical, 10)
+                .background(.white, in: Capsule())
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        }
     }
 }
 

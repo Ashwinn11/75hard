@@ -2,9 +2,7 @@ import Foundation
 import Observation
 import RevenueCat
 
-/// ⚠️ RevenueCat TEST STORE key — purchases are simulated end-to-end (no App Store Connect,
-/// no real charges). Swap for the production `appl_…` key before shipping.
-private let revenueCatKey = "test_MrDsNIMzOwosSuKOszOxLkMoVmx"
+private let revenueCatKey = "appl_QPTGxBXwEKhEldrWDvtUqgbyzAq"
 
 // MARK: - Premium (RevenueCat)
 //

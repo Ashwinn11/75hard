@@ -17,9 +17,6 @@ struct ProfileView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let c = challenge {
-                TabHeader(day: c.currentDay, showAvatar: false) {
-                    CircleIconButton(icon: "gearshape.fill") { showSettings = true }
-                }
                 ScrollView {
                     VStack(spacing: 0) {
                         PhotosPicker(selection: $photoItem, matching: .images) { ProfileAvatar(size: 128) }
@@ -38,6 +35,10 @@ struct ProfileView: View {
                     .padding(.horizontal, 20).padding(.bottom, 28)
                 }
                 .scrollIndicators(.hidden)
+                .overlay(alignment: .topTrailing) {
+                    CircleIconButton(icon: "gearshape.fill") { showSettings = true }
+                        .padding(.top, 12).padding(.trailing, 20)
+                }
             } else {
                 Spacer()
                 ContentUnavailableView {
