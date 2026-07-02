@@ -11,7 +11,7 @@ struct Her75App: App {
 
     var body: some Scene {
         WindowGroup {
-            RootGate()
+            AppRoot()
                 .tint(Theme.rose)
         }
         .modelContainer(container)
