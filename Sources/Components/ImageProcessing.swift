@@ -25,4 +25,13 @@ enum ImageProcessing {
     static func jpeg(_ image: UIImage, quality: CGFloat = 0.8) -> Data? {
         image.jpegData(compressionQuality: quality)
     }
+
+    /// Downsample `data` to a max edge of `maxPixel` and re-encode as JPEG for on-disk storage.
+    /// Camera originals are 3–12 MB; a proof/profile photo never needs that — this keeps the
+    /// shared container (and every later decode) small. ImageIO downsamples during decode, so
+    /// the full-resolution bitmap is never held in memory. Also normalizes HEIC/PNG → JPEG.
+    static func downsampledJPEG(_ data: Data, maxPixel: CGFloat, quality: CGFloat = 0.8) -> Data? {
+        guard let img = thumbnail(data, maxPixel: maxPixel) else { return nil }
+        return jpeg(img, quality: quality)
+    }
 }

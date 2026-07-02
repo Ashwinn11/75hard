@@ -27,16 +27,16 @@ enum Font2 {
     }
 }
 
-// MARK: - Eyebrow label  ("MAX EFFORT", "DAY 12 · 75 HARD")
+// MARK: - Section / category title
 
-struct EyebrowLabel: View {
+/// The one serif header used above cards and field groups — Settings sections, Profile
+/// categories, Add-friends groups. Defined once so every "category title" matches.
+struct SectionTitle: View {
     let text: String
-    var color: Color = Theme.rose
     var body: some View {
-        Text(text.uppercased())
-            .font(Font2.sans(12, .bold))
-            .tracking(2.2)                       // wide letterspacing
-            .foregroundStyle(color)
+        Text(text)
+            .font(Font2.serif(22, .semibold))
+            .foregroundStyle(Theme.ink)
     }
 }
 

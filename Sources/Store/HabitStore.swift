@@ -31,7 +31,8 @@ enum HabitActions {
             var filename: String?
             if let photo {
                 let name = "\(UUID().uuidString).jpg"
-                try? photo.write(to: AppGroup.photosURL.appendingPathComponent(name))
+                let jpeg = ImageProcessing.downsampledJPEG(photo, maxPixel: 1600) ?? photo
+                try? jpeg.write(to: AppGroup.photosURL.appendingPathComponent(name))
                 filename = name
             }
             let c = Completion(loggedAt: Date(),
@@ -91,7 +92,8 @@ enum HabitActions {
             context.insert(completion)
         }
         let name = "\(UUID().uuidString).jpg"
-        try? photo.write(to: AppGroup.photosURL.appendingPathComponent(name))
+        let jpeg = ImageProcessing.downsampledJPEG(photo, maxPixel: 1600) ?? photo
+        try? jpeg.write(to: AppGroup.photosURL.appendingPathComponent(name))
         completion.photoFilename = name
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()

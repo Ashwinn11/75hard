@@ -100,8 +100,7 @@ struct SettingsView: View {
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             // Serif section headers — a page of editorial chapters rather than uppercase labels.
-            Text(title)
-                .font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
+            SectionTitle(text: title)
                 .padding(.leading, 4)
             VStack(spacing: 0) { content() }
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -163,7 +162,7 @@ struct EditNameView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            EyebrowLabel(text: "Your name", color: Theme.ink.opacity(0.45))
+            SectionTitle(text: "Your name")
             TextField("Your name", text: $draft)
                 .font(Font2.sans(17, .bold)).foregroundStyle(Theme.ink)
                 .padding(14).background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -199,7 +198,7 @@ struct EditBioView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            EyebrowLabel(text: "Your bio", color: Theme.ink.opacity(0.45))
+            SectionTitle(text: "Your bio")
             TextField("A short line about you — shown when friends find you.", text: $draft, axis: .vertical)
                 .font(Font2.sans(15, .medium)).foregroundStyle(Theme.ink)
                 .lineLimit(3...6)

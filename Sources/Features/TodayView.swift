@@ -88,7 +88,11 @@ struct TodayView: View {
             if !celebratedDays.contains(idx) {
                 celebratedDays.insert(idx)
                 celebration.finale = idx + 1 >= c.lengthDays
-                celebration.day = idx + 1
+                celebration.info = CelebrationInfo(day: idx + 1,
+                                                   tasks: habits.map(\.title),
+                                                   start: c.startDate,
+                                                   days: c.lengthDays,
+                                                   title: c.displayTitle)
             }
         } else {
             celebratedDays.remove(idx)
@@ -208,76 +212,76 @@ private struct CheckShape: Shape {
     }
 }
 
-// MARK: - Day celebration — sticky note + poppers + dustbin on a blurred screen (tap to dismiss)
+// MARK: - Day celebration — poppers → sticky note crumples into the bin → shareable sticker
+
+/// What a finished day needs to render its celebration + shareable sticker.
+struct CelebrationInfo: Equatable {
+    let day: Int
+    let tasks: [String]
+    let start: Date
+    let days: Int          // challenge length (for the date range)
+    let title: String
+}
 
 /// Hoisted to RootView so the celebration can blur and cover the whole screen (incl. the tab bar).
 @Observable final class CelebrationCenter {
-    var day: Int? = nil
+    var info: CelebrationInfo? = nil
     var finale = false      // the celebrated day was the challenge's last
 }
 
+/// A hands-off sequence: confetti poppers fire, the day sticky note lands and then
+/// auto-crumples into the dustbin, and the finished-day sticker card slides up — with a
+/// close button and "Save today's sticker".
 struct DayCelebration: View {
-    var day: Int
+    let info: CelebrationInfo
     var onDone: () -> Void
+
     @State private var show = false
     @State private var exiting = false          // note crumples, shrinks, and drops into the trash
     @State private var crumple: CGFloat = 0
     @State private var swallowed = false        // trash squash-and-stretch as it "eats" the note
+    @State private var phase: Phase = .intro
+    @State private var stickerImage: Image?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private enum Phase { case intro, sticker }
+    private var range: String { challengeRangeText(start: info.start, days: info.days) }
+
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                // No solid background — the screen behind is blurred by the parent.
+        ZStack {
+            if phase == .intro {
                 ConfettiBurst().allowsHitTesting(false)
-                VStack(spacing: 0) {
-                    Spacer()
-                    note
-                        .shimmerOnce(delay: 0.7)
-                        .modifier(CrumpleEffect(progress: crumple))
-                        .scaleEffect(exiting ? 0.16 : (show ? 1 : 0.4))
-                        .rotationEffect(.degrees(exiting ? 22 : (show ? 0 : -5)))
-                        .offset(y: exiting ? geo.size.height / 2 - 130 : 0)
-                        .opacity(show && !swallowed ? 1 : 0)
-                    Spacer()
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 80, weight: .regular))
-                        .foregroundStyle(Theme.ink.opacity(0.7))
-                        .scaleEffect(x: swallowed ? 1.1 : 1, y: swallowed ? 0.86 : 1, anchor: .bottom)
-                        .animation(Motion.bouncy, value: swallowed)
-                        .padding(.bottom, 56)
-                        .opacity(show ? 1 : 0)
-                }
-                Text("Tap to dismiss")
-                    .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink.opacity(0.4))
-                    .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 18)
-                    .opacity(show && !exiting ? 1 : 0)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { dismiss() }
-            .onAppear {
-                // Success, then two light ticks timed to the corner poppers.
-                Haptics.success()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { Haptics.light() }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { Haptics.light() }
-                withAnimation(Motion.bouncy) { show = true }
+                intro
+            } else {
+                sticker.transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
+        .onAppear { runIntro() }
     }
 
-    /// The note crumples into a ball, drops into the dustbin, the bin gulps — then we're done.
-    private func dismiss() {
-        guard !exiting else { return }
-        if reduceMotion { onDone(); return }
-        Haptics.tap()
-        withAnimation(.easeIn(duration: 0.55)) {
-            exiting = true
-            crumple = 1
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            swallowed = true
-            Haptics.rigid()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onDone() }
+    // MARK: Intro (note lands, then auto-crumples into the bin)
+
+    private var intro: some View {
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                Spacer()
+                note
+                    .shimmerOnce(delay: 0.5)
+                    .modifier(CrumpleEffect(progress: crumple))
+                    .scaleEffect(exiting ? 0.16 : (show ? 1 : 0.4))
+                    .rotationEffect(.degrees(exiting ? 22 : (show ? 0 : -5)))
+                    .offset(y: exiting ? geo.size.height / 2 - 130 : 0)
+                    .opacity(show && !swallowed ? 1 : 0)
+                Spacer()
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 80, weight: .regular))
+                    .foregroundStyle(Theme.ink.opacity(0.7))
+                    .scaleEffect(x: swallowed ? 1.1 : 1, y: swallowed ? 0.86 : 1, anchor: .bottom)
+                    .animation(Motion.bouncy, value: swallowed)
+                    .padding(.bottom, 56)
+                    .opacity(show ? 1 : 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)   // GeometryReader pins top-left; fill so it centers
         }
     }
 
@@ -288,10 +292,92 @@ struct DayCelebration: View {
                 .fill(Theme.olive.gradient)
                 .frame(width: 188, height: 188)
                 .shadow(color: .black.opacity(0.18), radius: 18, y: 14)
-            Text("\(day)")
+            Text("\(info.day)")
                 .font(Font2.serif(112, .medium)).italic()
                 .foregroundStyle(Theme.ink)
         }
+    }
+
+    private func runIntro() {
+        // Success, then two light ticks timed to the corner poppers.
+        Haptics.success()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { Haptics.light() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { Haptics.light() }
+        withAnimation(Motion.bouncy) { show = true }
+
+        if reduceMotion {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { revealSticker() }
+            return
+        }
+        // Land, hold a beat, then crumple → drop → the bin gulps → reveal the sticker.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeIn(duration: 0.55)) { exiting = true; crumple = 1 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                swallowed = true
+                Haptics.rigid()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { revealSticker() }
+            }
+        }
+    }
+
+    private func revealSticker() {
+        renderSticker()
+        withAnimation(Motion.gentle) { phase = .sticker }
+    }
+
+    // MARK: Sticker (the finished-day receipt + save + close)
+
+    private var sticker: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            DayStickerCard(dayWords: dayInWords(info.day), range: range,
+                           tasks: info.tasks, challengeTitle: info.title, checked: true)
+                .padding(.horizontal, 42)
+                .staggeredAppear(index: 0)
+            Spacer()
+            saveButton.ctaWidth().padding(.bottom, 30)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) {
+            CircleIconButton(icon: "xmark") { onDone() }
+                .padding(.top, 54).padding(.trailing, 20)
+        }
+    }
+
+    // Styled like PrimaryButton, but a ShareLink so it opens the share/save sheet directly.
+    @ViewBuilder private var saveButton: some View {
+        if let stickerImage {
+            ShareLink(item: stickerImage,
+                      preview: SharePreview("Day \(info.day) · \(info.title)", image: stickerImage)) {
+                saveLabel
+            }
+            .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+        } else {
+            saveLabel.opacity(0.4)
+        }
+    }
+
+    private var saveLabel: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.down.to.line").font(.system(size: 16, weight: .bold))
+            Text("Save today's sticker").font(Font2.sans(17, .bold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity).padding(.vertical, 17)
+        .background(Theme.olive, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
+        .shadow(color: Theme.olive.opacity(0.30), radius: 10, x: 0, y: 5)
+    }
+
+    /// Render the sticker to a standalone image (on paper) for sharing / saving to Photos.
+    @MainActor private func renderSticker() {
+        let card = DayStickerCard(dayWords: dayInWords(info.day), range: range,
+                                  tasks: info.tasks, challengeTitle: info.title, checked: true)
+            .padding(26)
+            .frame(width: 360)
+            .background(Theme.paper)
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 3
+        if let ui = renderer.uiImage { stickerImage = Image(uiImage: ui) }
     }
 }
 

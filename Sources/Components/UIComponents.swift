@@ -491,6 +491,65 @@ struct LengthPicker: View {
     }
 }
 
+// MARK: - Day sticker card (the editorial "day N" receipt)
+
+/// The shareable "day N" card. Onboarding's Ready step shows it as a numbered plan preview
+/// ("day one"); the day-complete celebration shows it with the day's tasks checked off.
+struct DayStickerCard: View {
+    let dayWords: String            // spelled-out day: "one", "two"
+    let range: String               // "jul 1 → sep 30"
+    let tasks: [String]
+    let challengeTitle: String
+    var checked: Bool = false       // celebration = checkmarks; onboarding preview = numbers
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            (Text("day").font(Font2.serif(26, .medium)).italic().foregroundColor(Theme.ink)
+             + Text(" \(dayWords)").font(Font2.serif(26, .semibold)).foregroundColor(Theme.ink))
+            Text(range).font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(tasks.enumerated()), id: \.offset) { i, t in
+                    HStack(alignment: .top, spacing: 14) {
+                        Group {
+                            if checked {
+                                Image(systemName: "checkmark").font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Theme.ink)
+                            } else {
+                                Text("\(i + 1)").font(Font2.serif(17, .medium)).foregroundStyle(Theme.ink.opacity(0.6))
+                            }
+                        }
+                        .frame(width: 18, alignment: .leading)
+                        Text(t).font(Font2.sans(13.5, .semibold)).foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }.padding(.top, 2)
+            Divider().padding(.top, 4)
+            HStack {
+                Text(challengeTitle.uppercased()).font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.ink.opacity(0.35))
+                Spacer()
+                Text("BY 75 HER").font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.ink.opacity(0.35))
+            }
+        }
+        .padding(22)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10)
+    }
+}
+
+/// A challenge date range formatted like the sticker ("jul 1 → sep 30").
+func challengeRangeText(start: Date, days: Int) -> String {
+    let end = Calendar.current.date(byAdding: .day, value: days - 1, to: start) ?? start
+    return "\(start.formatted(.dateTime.month(.abbreviated).day())) → \(end.formatted(.dateTime.month(.abbreviated).day()))".lowercased()
+}
+
+/// Day number spelled out ("two") for the sticker headline.
+func dayInWords(_ n: Int) -> String {
+    let f = NumberFormatter(); f.numberStyle = .spellOut
+    return (f.string(from: NSNumber(value: n)) ?? "\(n)").lowercased()
+}
+
 // MARK: - Invite card (letterpress stationery showing your name + join code)
 
 /// Reused by onboarding's "invite your friends" screen and the Friends tab. `code` is nil while

@@ -644,34 +644,11 @@ private struct ReadyStep: View {
     }
 
     private var planCard: some View {
-        let end = Calendar.current.date(byAdding: .day, value: model.lengthDays - 1, to: model.startDate) ?? model.startDate
-        let range = "\(model.startDate.formatted(.dateTime.month(.abbreviated).day()))  →  \(end.formatted(.dateTime.month(.abbreviated).day()))".lowercased()
-        return VStack(alignment: .leading, spacing: 12) {
-            (Text("day").font(Font2.serif(26, .medium)).italic().foregroundColor(Theme.ink)
-             + Text(" one").font(Font2.serif(26, .semibold)).foregroundColor(Theme.ink))
-            Text(range).font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(model.habitDrafts.enumerated()), id: \.element.id) { i, d in
-                    HStack(alignment: .top, spacing: 14) {
-                        Text("\(i + 1)").font(Font2.serif(17, .medium)).foregroundStyle(Theme.ink.opacity(0.6))
-                            .frame(width: 18, alignment: .leading)
-                        Text(d.title).font(Font2.sans(13.5, .semibold)).foregroundStyle(Theme.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
-                    }
-                }
-            }.padding(.top, 2)
-            Divider().padding(.top, 4)
-            HStack {
-                Text(model.challengeTitle.uppercased()).font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.ink.opacity(0.35))
-                Spacer()
-                Text("BY 75 HER").font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.ink.opacity(0.35))
-            }
-        }
-        .padding(22)
-        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10)
-        .padding(.horizontal, 34)
+        DayStickerCard(dayWords: "one",
+                       range: challengeRangeText(start: model.startDate, days: model.lengthDays),
+                       tasks: model.habitDrafts.map(\.title),
+                       challengeTitle: model.challengeTitle)
+            .padding(.horizontal, 34)
     }
 }
 

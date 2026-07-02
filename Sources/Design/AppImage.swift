@@ -5,7 +5,12 @@ import UIKit
 /// Falls back gracefully so a missing image never breaks layout — callers get a
 /// tasteful gradient placeholder instead.
 enum AppImage {
-    private static var cache = NSCache<NSString, UIImage>()
+    // Bounded so decoded bundled photos (marquee / hero images) can't accumulate unbounded.
+    private static let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 40
+        return c
+    }()
 
     static func ui(_ name: String) -> UIImage? {
         if let hit = cache.object(forKey: name as NSString) { return hit }
@@ -33,7 +38,9 @@ enum ProfilePhoto {
     static var fileURL: URL { AppGroup.containerURL.appendingPathComponent("profile.jpg") }
     static func load() -> UIImage? { UIImage(contentsOfFile: fileURL.path) }
     static func save(_ data: Data) {
-        try? data.write(to: fileURL)
+        // The avatar renders at ≤128pt; store a small square-ish JPEG, not the camera original.
+        let out = ImageProcessing.downsampledJPEG(data, maxPixel: 512, quality: 0.85) ?? data
+        try? out.write(to: fileURL)
         let v = UserDefaults.standard.integer(forKey: "profilePhotoV")
         UserDefaults.standard.set(v + 1, forKey: "profilePhotoV")
     }

@@ -201,14 +201,19 @@ private struct FriendProfileSheet: View {
                     }
 
                     if !friend.challenge.isEmpty {
-                        VStack(spacing: 6) {
-                            EyebrowLabel(text: "On the challenge", color: Theme.textSecondary)
-                            Text(friend.challenge).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
+                        // The same challenge strip card used everywhere — their challenge's
+                        // photos with the name on the floating pill. A custom-named challenge
+                        // won't match a catalog title, so it falls back to the custom card.
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionTitle(text: "On the challenge")
+                            ChallengeStripCard(
+                                track: ChallengeTrack.allCases.first { $0.title == friend.challenge } ?? .custom,
+                                pillText: friend.challenge)
                             Text(friend.total > 0 ? "Day \(friend.day) · \(friend.done)/\(friend.total) done today"
                                                   : "Day \(friend.day)")
                                 .font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity).padding(.vertical, 22).softCard()
                     }
 
                     Button(role: .destructive) { confirmRemove = true } label: {
@@ -273,12 +278,12 @@ private struct AddFriendsSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        EyebrowLabel(text: "Your invite", color: Theme.textSecondary)
+                        SectionTitle(text: "Your invite")
                         MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent, challenge: challenge, compact: true)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        EyebrowLabel(text: "Add by code", color: Theme.textSecondary)
+                        SectionTitle(text: "Add by code")
                         AddFriendField(accent: accent,
                             lookup: { try await social.lookup($0) },
                             add: { try await social.accept($0) })
@@ -287,7 +292,7 @@ private struct AddFriendsSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        EyebrowLabel(text: "Suggested", color: Theme.textSecondary)
+                        SectionTitle(text: "Suggested")
                         if loading {
                             VStack(spacing: 12) {
                                 ForEach(0..<3, id: \.self) { i in
@@ -389,7 +394,7 @@ private struct RequestsView: View {
                 }
                 if !social.incoming.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        EyebrowLabel(text: "New", color: Theme.textSecondary)
+                        SectionTitle(text: "New")
                         ForEach(social.incoming) { person in
                             RequestRow(person: person, accent: accent,
                                 accept: { accept(person) },
@@ -402,7 +407,7 @@ private struct RequestsView: View {
                 }
                 if !social.outgoing.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        EyebrowLabel(text: "Sent", color: Theme.textSecondary)
+                        SectionTitle(text: "Sent")
                         ForEach(social.outgoing) { person in
                             PendingRow(person: person, cancel: { Task { await social.remove(person.id) } })
                         }

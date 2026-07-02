@@ -10,6 +10,7 @@ struct ProfileView: View {
     @State private var showPicker = false
     @State private var showSettings = false
     @State private var showBioEdit = false
+    @State private var viewerDay: ProofDay?
     @State private var social = SocialStore.shared
     private var challenge: Challenge? { challenges.first }
 
@@ -31,6 +32,8 @@ struct ProfileView: View {
                             .padding(.top, 8)
                         challengeSection(c)
                             .padding(.top, 30)
+                        journeySection(c)
+                            .padding(.top, 26)
                     }
                     .padding(.horizontal, 20).padding(.bottom, 28)
                 }
@@ -77,6 +80,22 @@ struct ProfileView: View {
                 .presentationCornerRadius(34)
                 .presentationDragIndicator(.visible)
         }
+        .fullScreenCover(item: $viewerDay) { day in
+            ProofViewer(shots: day.shots)
+        }
+    }
+
+    // The proof-photo journey — a photo calendar of the challenge, inline. Tapping a day
+    // with photos opens them full screen.
+    private func journeySection(_ c: Challenge) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionTitle(text: "Your journey")
+            ProofCalendar(challenge: c) { dayShots in
+                Haptics.tap()
+                viewerDay = ProofDay(shots: dayShots)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var bioLine: some View {
@@ -105,7 +124,7 @@ struct ProfileView: View {
     private func challengeSection(_ c: Challenge) -> some View {
         Button { showPicker = true } label: {
             VStack(alignment: .leading, spacing: 8) {
-                EyebrowLabel(text: "Your challenge", color: Theme.ink.opacity(0.45))
+                SectionTitle(text: "Your challenge")
                 ChallengeStripCard(track: c.track, pillText: "Joined \(c.displayTitle)")
             }
         }
