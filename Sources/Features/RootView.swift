@@ -24,5 +24,12 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: celebration.day)
+        // Ask for a rating as the day-complete celebration closes — riding the high without
+        // covering the confetti. The Ratings gate decides if it's actually time to ask.
+        .onChange(of: celebration.day) { old, new in
+            if new == nil, let old {
+                Ratings.note(celebration.finale ? .challengeFinished : .dayComplete(day: old))
+            }
+        }
     }
 }

@@ -413,8 +413,10 @@ private struct RequestsView: View {
     private func accept(_ person: PersonRef) {
         message = nil
         Task {
-            do { try await social.accept(person) }
-            catch { message = (error as? SocialError)?.errorDescription ?? "Couldn't accept right now. Try again." }
+            do {
+                try await social.accept(person)
+                Ratings.note(.friendJoined)
+            } catch { message = (error as? SocialError)?.errorDescription ?? "Couldn't accept right now. Try again." }
         }
     }
 }

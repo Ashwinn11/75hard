@@ -68,6 +68,7 @@ struct TodayView: View {
         if allDone {
             if !celebratedDays.contains(idx) {
                 celebratedDays.insert(idx)
+                celebration.finale = idx + 1 >= c.lengthDays
                 celebration.day = idx + 1
             }
         } else {
@@ -153,6 +154,7 @@ struct HabitRow: View {
 /// Hoisted to RootView so the celebration can blur and cover the whole screen (incl. the tab bar).
 @Observable final class CelebrationCenter {
     var day: Int? = nil
+    var finale = false      // the celebrated day was the challenge's last
 }
 
 struct DayCelebration: View {
