@@ -5,7 +5,7 @@ import SwiftUI
 struct PrimaryButton: View {
     let title: String
     var icon: String? = nil
-    var color: Color = Theme.coral          // per-screen flat pastel accent
+    var color: Color = Theme.clay          // per-screen flat pastel accent
     var textColor: Color = .white
     var action: () -> Void
 
@@ -116,7 +116,7 @@ struct ProfileAvatar: View {
             if let img = ProfilePhoto.load() {
                 Image(uiImage: img).resizable().scaledToFill()
             } else {
-                Theme.roseGradient
+                Theme.clayGradient
                 Image(systemName: "person.fill")
                     .font(.system(size: size * 0.4, weight: .semibold)).foregroundStyle(.white)
             }
@@ -127,7 +127,7 @@ struct ProfileAvatar: View {
         .overlay {
             if sweep > 0 {
                 Circle()
-                    .stroke(AngularGradient(colors: [.clear, Theme.coral, Theme.roseDeep, .clear],
+                    .stroke(AngularGradient(colors: [.clear, Theme.clay, Theme.clayDeep, .clear],
                                             center: .center),
                             lineWidth: max(2, size / 44))
                     .rotationEffect(.degrees(sweep))
@@ -196,7 +196,7 @@ struct RulerSlider: View {
     let range: ClosedRange<Int>
     var caption: String = ""
     var unit: String = ""
-    var accent: Color = Theme.coral
+    var accent: Color = Theme.clay
     var tickSpacing: CGFloat = 14
     var showValue: Bool = true
     var showLabels: Bool = true
@@ -301,11 +301,11 @@ struct RulerSlider: View {
 /// switch-challenge flow — so a track always shows the same photos and fallback colors.
 struct ChallengeStripCard: View {
     let track: ChallengeTrack
-    var pillText: String? = nil      // override for the floating pill; nil → the track's joined count
+    var pillText: String? = nil      // override for the floating pill; nil → the track's tagline
     var height: CGFloat = 108
     var showTitle = true
 
-    private var pill: String? { pillText ?? (track.joined.isEmpty ? nil : track.joined) }
+    private var pill: String? { pillText ?? (track.tagline.isEmpty ? nil : track.tagline) }
 
     // Deterministic palette seed (String.hashValue is randomized per launch).
     private var seed: Int {
@@ -362,6 +362,8 @@ struct TaskListEditor: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 15)
                     .background(Theme.chipFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
+            .buttonStyle(PressableStyle())
+            .ctaWidth()
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                     row(i, item).staggeredAppear(index: i)
@@ -455,32 +457,31 @@ struct EditTaskSheet: View {
 struct LengthPicker: View {
     @Binding var days: Int
     let startDate: Date
-    var showsCustomBadge = false        // onboarding shows a "Custom" state pill under the presets
-    @Namespace private var pillNS      // the ink capsule slides between preset pills
+    @Namespace private var pillNS      // the ink capsule slides between the pills
 
     static let presets = [7, 14, 30, 75]
+    private var isCustom: Bool { !Self.presets.contains(days) }
 
     var body: some View {
         VStack(spacing: 0) {
-            RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.sage)
+            RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.olive)
                 .padding(.horizontal, 16)
-            HStack(spacing: 10) {
-                ForEach(Self.presets, id: \.self) { p in
-                    SelectPill(text: "\(p)", selected: days == p, slide: ("preset", pillNS)) {
-                        withAnimation(Motion.snappy) { days = p }
-                    }
+            // One pill row: 7 · 14 · 30 · 75 · Custom (custom lights up when the ruler
+            // sits on a non-preset day).
+            HStack(spacing: 8) {
+                ForEach(Self.presets, id: \.self) { p in preset(p) }
+                SelectPill(text: "Custom", selected: isCustom, hPad: 14, slide: ("preset", pillNS)) {
+                    guard !isCustom else { return }
+                    withAnimation(Motion.snappy) { days = 45 }   // a distinctly non-preset start
                 }
             }.padding(.top, 20)
-            if showsCustomBadge {
-                Text("Custom")
-                    .font(Font2.sans(15, .bold)).foregroundStyle(Self.presets.contains(days) ? Theme.ink : .white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 13)
-                    .background(Self.presets.contains(days) ? AnyShapeStyle(Color.white) : AnyShapeStyle(Theme.ink), in: Capsule())
-                    .overlay(Capsule().stroke(Theme.ring, lineWidth: Self.presets.contains(days) ? 1.5 : 0))
-                    .animation(Motion.snappy, value: days)
-                    .padding(.horizontal, 30).padding(.top, 10)
-            }
             Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
+        }
+    }
+
+    private func preset(_ p: Int) -> some View {
+        SelectPill(text: "\(p)", selected: days == p, hPad: 14, slide: ("preset", pillNS)) {
+            withAnimation(Motion.snappy) { days = p }
         }
     }
 
@@ -490,25 +491,26 @@ struct LengthPicker: View {
     }
 }
 
-// MARK: - Invite ticket (perforated coupon showing your name + join code)
+// MARK: - Invite card (letterpress stationery showing your name + join code)
 
 /// Reused by onboarding's "invite your friends" screen and the Friends tab. `code` is nil while
-/// the code is still being provisioned (shows a placeholder). The perforation notches are the page
-/// background biting into a warm cream ticket.
+/// the code is still being provisioned (shows a placeholder). Styled like a letterpress
+/// stationery card: warm cotton stock with a double hairline border and a dashed rule.
 struct InviteTicket: View {
     let name: String
     var code: String? = nil
-    var compact: Bool = false            // show only the code half (no "Join <name>" header/perforation)
+    var compact: Bool = false            // show only the code half (no "Join <name>" header/rule)
     var shareText: String? = nil         // when set, a share icon appears inline next to the code
-    var ticketFill: Color = Color(hex: "F3EEE3")
-    var notchColor: Color = Theme.paper  // should match the background behind the card
+    var challenge: String = "75 Her"     // the selected challenge, shown as the card's eyebrow
+    var ticketFill: Color = Color(hex: "F6F0E4")
     @State private var shareBounce = 0
 
     var body: some View {
         VStack(spacing: 0) {
             if !compact {
                 VStack(spacing: 10) {
-                    Text("75 HER").font(Font2.sans(13, .bold)).tracking(5).foregroundStyle(Theme.ink.opacity(0.4))
+                    Text(challenge.uppercased()).font(Font2.sans(13, .bold)).tracking(5).foregroundStyle(Theme.ink.opacity(0.4))
+                        .multilineTextAlignment(.center)
                     (Text("Join ").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink)
                      + Text(name.isEmpty ? "me" : name).font(Font2.serif(30, .semibold)).italic().foregroundColor(Theme.ink)
                      + Text("\nfor the challenge").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink))
@@ -516,7 +518,8 @@ struct InviteTicket: View {
                 }
                 .padding(.horizontal, 26).padding(.top, 46).padding(.bottom, 30)
 
-                perforation
+                DashedRule().stroke(Theme.ink.opacity(0.18), style: StrokeStyle(lineWidth: 1.2, dash: [5, 7]))
+                    .frame(height: 1.2).padding(.horizontal, 34)
             }
 
             VStack(spacing: 8) {
@@ -540,32 +543,28 @@ struct InviteTicket: View {
                         .accessibilityLabel("Share your invite code")
                     }
                 }
-                Text("Share this code with your girls")
+                Text("Share this code with your circle")
                     .font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
             }
             .padding(.horizontal, 26).padding(.top, compact ? 34 : 28).padding(.bottom, compact ? 34 : 46)
         }
         .frame(maxWidth: .infinity)
         .background {
-            // Shadow lives on the card shape only, so the notch circles (which poke past the
-            // ticket edge) don't cast their own halos.
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(ticketFill)
                 .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
         }
-    }
-
-    private var perforation: some View {
-        ZStack {
-            DashedRule().stroke(Theme.ink.opacity(0.2), style: StrokeStyle(lineWidth: 1.5, dash: [6, 7]))
-                .frame(height: 1.5).padding(.horizontal, 26)
+        // Letterpress double hairline: one at the edge, one inset.
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Theme.ink.opacity(0.14), lineWidth: 1)
         }
-        .frame(maxWidth: .infinity)
-        .overlay(alignment: .leading)  { notch.offset(x: -13) }
-        .overlay(alignment: .trailing) { notch.offset(x: 13) }
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Theme.ink.opacity(0.10), lineWidth: 1)
+                .padding(7)
+        }
     }
-
-    private var notch: some View { Circle().fill(notchColor).frame(width: 26, height: 26) }
 }
 
 /// A single horizontal line through the middle of its rect (for dashed perforations).

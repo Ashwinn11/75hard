@@ -42,7 +42,7 @@ enum ProfilePhoto {
 /// A photo that fills its frame, or a soft branded gradient if the asset is missing.
 struct PhotoFill: View {
     let name: String
-    var fallback: LinearGradient = Theme.roseGradient
+    var fallback: LinearGradient = Theme.clayGradient
 
     var body: some View {
         if let ui = AppImage.ui(name) {

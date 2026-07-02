@@ -7,17 +7,17 @@ enum HabitColor: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
 
     /// The single app palette = the 5 screen accent colors. One per case for cycling.
-    static var palette: [HabitColor] { [.rose, .sky, .sage, .blush, .amber] }  // coral·periwinkle·sage·orchid·taupe
+    static var palette: [HabitColor] { [.rose, .sky, .sage, .blush, .amber] }  // clay·mist·olive·mauve·sand
 
     /// Habits use the same 5 accent colors as the buttons (each a soft tint→accent gradient).
     /// The 8 case names alias onto these 5 so existing code keeps working.
     var stops: [Color] {
         switch self {
-        case .rose, .berry:  return [Color(hex: "F2B3AB"), Color(hex: "E9887C")]   // coral
-        case .sky:           return [Color(hex: "C9D6E9"), Color(hex: "ADC1DE")]   // periwinkle
-        case .sage:          return [Color(hex: "C2D3B4"), Color(hex: "A6BA94")]   // sage
-        case .blush, .lilac: return [Color(hex: "E3C2DC"), Color(hex: "D2A0C8")]   // orchid
-        case .amber, .sand:  return [Color(hex: "C4B3A4"), Color(hex: "AA9281")]   // taupe
+        case .rose, .berry:  return [Color(hex: "DCA48E"), Color(hex: "C4765A")]   // clay
+        case .sky:           return [Color(hex: "C0CDD3"), Color(hex: "94A8B1")]   // mist
+        case .sage:          return [Color(hex: "B4BE9C"), Color(hex: "8D9A70")]   // olive (lightened for tiles)
+        case .blush, .lilac: return [Color(hex: "C9ABB5"), Color(hex: "A98290")]   // mauve
+        case .amber, .sand:  return [Color(hex: "D0BA9E"), Color(hex: "B69B7C")]   // sand
         }
     }
 

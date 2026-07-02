@@ -38,10 +38,11 @@ struct TypewriterText: View {
 }
 
 /// Build a serif headline (with an accent word) as an AttributedString for the typewriter.
-/// `accentItalic` controls whether the accent word is italic (hero screens) or bold upright (quiz).
+/// The accent word is colored, not italicized (the italic-accent pattern went with the re-skin);
+/// `accentItalic` remains for the rare deliberately-italic line.
 func serifAttr(_ lead: String, accent: String? = nil, trail: String? = nil,
                size: CGFloat = 34, accentColor: Color = Theme.rose, base: Color = Theme.ink,
-               accentItalic: Bool = true) -> AttributedString {
+               accentItalic: Bool = false) -> AttributedString {
     func run(_ s: String, italic: Bool, color: Color) -> AttributedString {
         var a = AttributedString(s)
         a.font = italic ? Font2.serif(size, .semibold).italic() : Font2.serif(size, .semibold)
@@ -61,7 +62,7 @@ struct TypewriterHeadline: View {
     var trail: String? = nil
     var size: CGFloat = 34
     var accentColor: Color = Theme.rose
-    var accentItalic: Bool = true
+    var accentItalic: Bool = false
     var alignment: TextAlignment = .leading
 
     var body: some View {
@@ -229,7 +230,7 @@ struct MiniPhonePreview: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                Circle().fill(Theme.roseGradient).frame(width: 26, height: 26)
+                Circle().fill(Theme.clayGradient).frame(width: 26, height: 26)
                     .overlay(Image(systemName: "person.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white))
                 VStack(alignment: .leading, spacing: -1) {
                     Text("DAY 6").font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.rose)

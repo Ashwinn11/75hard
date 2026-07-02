@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Two-family type system:
-/// • Cormorant Garamond — display serif, big headlines with italic accent words.
+/// • Cormorant Garamond — display serif; accent words are colored upright (no italic-accent pattern).
 /// • Hanken Grotesk — UI/body sans at heavy weights for titles, buttons, eyebrow labels.
 enum Font2 {
 
@@ -40,24 +40,25 @@ struct EyebrowLabel: View {
     }
 }
 
-// MARK: - Serif headline with a pink italic accent word
+// MARK: - Serif headline with a colored accent word
 
 /// Renders e.g. `SerifHeadline("Pick your", accent: "intensity")` →
-/// "Pick your *intensity*" with the accent word in italic pink.
+/// "Pick your intensity" with the accent word in the screen's accent color
+/// (upright — the italic-accent pattern is gone with the re-skin).
 struct SerifHeadline: View {
     let lead: String
     var accent: String? = nil
     var trail: String? = nil
     var size: CGFloat = 40
     var color: Color = Theme.ink
-    var accentColor: Color = Theme.coral
+    var accentColor: Color = Theme.clay
     var alignment: TextAlignment = .center
 
     var body: some View {
         var t = Text(lead).font(Font2.serif(size, .semibold)).foregroundColor(color)
         if let accent {
             t = t + Text(" ")
-                + Text(accent).font(Font2.serif(size, .semibold)).italic().foregroundColor(accentColor)
+                + Text(accent).font(Font2.serif(size, .semibold)).foregroundColor(accentColor)
         }
         if let trail {
             t = t + Text(" ")

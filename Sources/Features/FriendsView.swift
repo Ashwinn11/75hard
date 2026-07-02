@@ -12,7 +12,7 @@ struct FriendsView: View {
     @State private var showAdd = false
     @State private var selectedFriend: FriendStatus?
 
-    private let accent = Theme.sage
+    private let accent = Theme.olive
     private var myName: String { challenge?.ownerName ?? "" }
     private var shareText: String {
         let who = myName.isEmpty ? "me" : myName
@@ -63,7 +63,7 @@ struct FriendsView: View {
             if let c = challenge { await social.publishStatus(for: c) }
         }
         .sheet(isPresented: $showAdd) {
-            AddFriendsSheet(accent: accent, myName: myName, shareText: shareText)
+            AddFriendsSheet(accent: accent, myName: myName, shareText: shareText, challenge: challengeTitle)
                 .presentationCornerRadius(34)
                 .presentationDragIndicator(.visible)
         }
@@ -78,12 +78,19 @@ struct FriendsView: View {
 
     // MARK: States
 
+    // Shimmering skeletons in the exact shape of friend cards while CloudKit connects.
     private var loading: some View {
-        VStack(spacing: 14) {
-            ProgressView().tint(accent)
-            Text("Connecting…").font(Font2.sans(14, .medium)).foregroundStyle(Theme.textSecondary)
+        ScrollView {
+            VStack(spacing: 16) {
+                ForEach(0..<3, id: \.self) { i in
+                    SkeletonFriendCard().staggeredAppear(index: i)
+                }
+            }
+            .padding(.horizontal, 20).padding(.top, 18)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollIndicators(.hidden)
+        .allowsHitTesting(false)
+        .accessibilityLabel("Connecting")
     }
 
     private func unavailable(_ message: String) -> some View {
@@ -107,12 +114,14 @@ struct FriendsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var challengeTitle: String { challenge?.displayTitle ?? "75 Her" }
+
     private var friendsList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if social.friends.isEmpty {
                     // No friends yet → the big invite ticket lives here so it's front-and-center.
-                    MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent)
+                    MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent, challenge: challengeTitle)
                     AddFriendField(accent: accent,
                         lookup: { try await social.lookup($0) },
                         add: { try await social.accept($0) })
@@ -151,9 +160,10 @@ private struct MyInvitePanel: View {
     let code: String?
     let shareText: String
     let accent: Color
+    var challenge: String = "75 Her"
     var compact: Bool = false
     var body: some View {
-        InviteTicket(name: name, code: code, compact: compact, shareText: shareText)
+        InviteTicket(name: name, code: code, compact: compact, shareText: shareText, challenge: challenge)
     }
 }
 
@@ -169,7 +179,7 @@ private struct FriendProfileSheet: View {
     @State private var confirmRemove = false
 
     private var ring: LinearGradient {
-        LinearGradient(colors: [Theme.coral, Theme.orchid], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [Theme.clay, Theme.mauve], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     var body: some View {
@@ -233,6 +243,7 @@ private struct AddFriendsSheet: View {
     let accent: Color
     let myName: String
     let shareText: String
+    var challenge: String = "75 Her"
 
     @Environment(\.dismiss) private var dismiss
     @State private var social = SocialStore.shared
@@ -263,7 +274,7 @@ private struct AddFriendsSheet: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         EyebrowLabel(text: "Your invite", color: Theme.textSecondary)
-                        MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent, compact: true)
+                        MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent, challenge: challenge, compact: true)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -278,7 +289,12 @@ private struct AddFriendsSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         EyebrowLabel(text: "Suggested", color: Theme.textSecondary)
                         if loading {
-                            ProgressView().tint(accent).frame(maxWidth: .infinity).padding(.vertical, 24)
+                            VStack(spacing: 12) {
+                                ForEach(0..<3, id: \.self) { i in
+                                    SkeletonPersonRow().staggeredAppear(index: i)
+                                }
+                            }
+                            .allowsHitTesting(false)
                         } else if visibleSuggestions.isEmpty {
                             suggestionsEmpty
                         } else {
@@ -531,13 +547,14 @@ private struct AddFriendField: View {
 
 /// A friend's card — their avatar + day on the left, their live daily checklist on the right.
 /// Tapping the avatar opens their profile.
-private struct FriendRow: View {
+/// Internal: onboarding's FriendsPreviewStep renders the same card over sample data.
+struct FriendRow: View {
     let friend: FriendStatus
     let accent: Color
     var onTapAvatar: () -> Void = {}
 
     private var ring: LinearGradient {
-        LinearGradient(colors: [Theme.coral, Theme.orchid], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [Theme.clay, Theme.mauve], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     var body: some View {
@@ -644,12 +661,66 @@ private struct PendingRow: View {
     }
 }
 
+// MARK: - Skeletons (loading placeholders, swept by the Metal shimmer)
+
+private func skeletonBar(_ width: CGFloat, _ height: CGFloat) -> some View {
+    RoundedRectangle(cornerRadius: height / 2).fill(Theme.chipFill)
+        .frame(width: width, height: height)
+}
+
+/// Loading stand-in for FriendRow — same silhouette: avatar + name left, checklist right.
+private struct SkeletonFriendCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(spacing: 10) {
+                Circle().fill(Theme.chipFill).frame(width: 68, height: 68)
+                skeletonBar(58, 12)
+                skeletonBar(42, 9)
+            }
+            .frame(width: 88)
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(0..<3, id: \.self) { i in
+                    HStack(spacing: 11) {
+                        Circle().fill(Theme.chipFill).frame(width: 21, height: 21)
+                        skeletonBar([150, 110, 130][i], 11)
+                    }
+                }
+            }
+            .padding(.top, 4)
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
+        .skeletonShimmer()
+    }
+}
+
+/// Loading stand-in for SuggestionRow — avatar, two text lines, Add-button capsule.
+private struct SkeletonPersonRow: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            Circle().fill(Theme.chipFill).frame(width: 48, height: 48)
+            VStack(alignment: .leading, spacing: 7) {
+                skeletonBar(110, 12)
+                skeletonBar(160, 9)
+            }
+            Spacer(minLength: 8)
+            Capsule().fill(Theme.chipFill).frame(width: 58, height: 34)
+        }
+        .padding(14).background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
+        .skeletonShimmer()
+    }
+}
+
 // MARK: - Small pieces
 
 struct InitialAvatar: View {
     let name: String
     var photo: Data? = nil
-    var accent: Color = Theme.sage
+    var accent: Color = Theme.olive
     var seed: String? = nil          // stable identity (userID) → same color for a person everywhere
     var size: CGFloat = 48
     private var initial: String { name.first.map { String($0).uppercased() } ?? "?" }
@@ -659,7 +730,7 @@ struct InitialAvatar: View {
         // Deterministic hash (String.hashValue is randomized per launch) → fixed palette pick.
         var h = 5381
         for b in seed.utf8 { h = (h &* 33) &+ Int(b) }
-        let palette = [Theme.coral, Theme.periwinkle, Theme.sage, Theme.orchid, Theme.taupe]
+        let palette = [Theme.clay, Theme.mist, Theme.olive, Theme.mauve, Theme.sand]
         return palette[abs(h) % palette.count]
     }
 
@@ -676,17 +747,3 @@ struct InitialAvatar: View {
     }
 }
 
-struct ProgressCapsule: View {
-    let fraction: Double
-    let accent: Color
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.ring)
-                Capsule().fill(accent).frame(width: max(6, geo.size.width * fraction))
-                    .animation(Motion.gentle, value: fraction)
-            }
-        }
-        .frame(height: 6)
-    }
-}

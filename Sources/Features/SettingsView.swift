@@ -99,7 +99,9 @@ struct SettingsView: View {
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            EyebrowLabel(text: title, color: Theme.textSecondary)
+            // Serif section headers — a page of editorial chapters rather than uppercase labels.
+            Text(title)
+                .font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
                 .padding(.leading, 4)
             VStack(spacing: 0) { content() }
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -169,7 +171,7 @@ struct EditNameView: View {
             Text("Shown to friends on your invite and your check-ins.")
                 .font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
             Spacer()
-            PrimaryButton(title: "Save", color: Theme.orchid) { save() }.ctaWidth()
+            PrimaryButton(title: "Save", color: Theme.mauve) { save() }.ctaWidth()
         }
         .padding(20)
         .background(Theme.paper.ignoresSafeArea())
@@ -208,7 +210,7 @@ struct EditBioView: View {
                 .font(Font2.sans(11, .medium)).foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             Spacer()
-            PrimaryButton(title: "Save", color: Theme.sage) { save() }.ctaWidth()
+            PrimaryButton(title: "Save", color: Theme.olive) { save() }.ctaWidth()
         }
         .padding(20)
         .background(Theme.paper.ignoresSafeArea())
@@ -243,7 +245,7 @@ struct DurationView: View {
                     .multilineTextAlignment(.center).padding(.horizontal, 30).padding(.top, 10)
             }
             Spacer()
-            PrimaryButton(title: "Save", color: Theme.taupe) { save() }.ctaWidth().padding(.bottom, 22)
+            PrimaryButton(title: "Save", color: Theme.sand) { save() }.ctaWidth().padding(.bottom, 22)
         }
         .background(Theme.paper.ignoresSafeArea())
         .navigationTitle("Challenge length").navigationBarTitleDisplayMode(.inline)

@@ -47,7 +47,7 @@ struct TodayProvider: TimelineProvider {
         let missions = c.habitsOrdered.map {
             MissionSnapshot(id: $0.id, title: $0.title, color: $0.color, done: $0.isDoneToday)
         }
-        return TodayEntry(date: .now, day: c.currentDay, track: c.track.title, missions: missions)
+        return TodayEntry(date: .now, day: c.currentDay, track: c.displayTitle, missions: missions)
     }
 }
 

@@ -53,6 +53,27 @@ extension View {
     }
 }
 
+// MARK: - Skeleton shimmer (looping sweep for loading placeholders — the ONE allowed loop)
+
+private struct SkeletonShimmer: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { tl in
+            // A sweep every 1.6s, travelling -0.4 → 1.4 so it fully clears the view.
+            let phase = tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
+            content.modifier(ShimmerPhase(progress: CGFloat(phase) * 1.8 - 0.4, strength: 0.55))
+        }
+    }
+}
+
+extension View {
+    /// Looping highlight sweep for skeleton/loading placeholders. Pauses under Reduce Motion.
+    func skeletonShimmer() -> some View {
+        modifier(SkeletonShimmer())
+    }
+}
+
 // MARK: - Ripple on tap (liquid pulse from the touch point)
 
 private struct RippleShader: ViewModifier {

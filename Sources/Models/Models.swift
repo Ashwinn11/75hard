@@ -46,18 +46,19 @@ enum ChallengeTrack: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var joined: String {
+    /// Short character line for the card's floating pill (replaced the fake joined counts).
+    var tagline: String {
         switch self {
-        case .her75:          return "+24,872 joined"
-        case .hard:           return "+9,999 joined"
-        case .medium:         return "+4,999 joined"
-        case .soft:           return "+7,498 joined"
-        case .betterMe:       return "+1,847 joined"
-        case .glowUp:         return "+1,259 joined"
-        case .sugarFree:      return "+592 joined"
-        case .mentalWellness: return "+537 joined"
-        case .hotter:         return "+601 joined"
-        case .squat30:        return "+588 joined"
+        case .her75:          return "our signature"
+        case .hard:           return "the original"
+        case .medium:         return "firm but fair"
+        case .soft:           return "a gentle start"
+        case .betterMe:       return "small habits, kept"
+        case .glowUp:         return "30 days of glow"
+        case .sugarFree:      return "the sweet reset"
+        case .mentalWellness: return "quiet the noise"
+        case .hotter:         return "all the way up"
+        case .squat30:        return "quick + fierce"
         case .custom:         return ""
         }
     }
@@ -160,6 +161,7 @@ final class Challenge {
     var startDate: Date = Date()
     var createdAt: Date = Date()
     var ownerName: String = ""
+    var customTitle: String = ""            // user-given name for a custom challenge
 
     @Relationship(deleteRule: .cascade, inverse: \Habit.challenge)
     var habits: [Habit] = []
@@ -172,6 +174,11 @@ final class Challenge {
     }
 
     var track: ChallengeTrack { ChallengeTrack(rawValue: trackRaw) ?? .her75 }
+
+    /// What to show anywhere the challenge is named — the user's custom name when set.
+    var displayTitle: String {
+        track == .custom && !customTitle.isEmpty ? customTitle : track.title
+    }
 
     /// 1-based day number of `date` within the challenge (day 1 = the start date's day).
     func dayIndex(of date: Date) -> Int {

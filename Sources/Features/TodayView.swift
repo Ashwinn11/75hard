@@ -21,7 +21,7 @@ struct TodayView: View {
                 }
                 RulerSlider(value: Binding(get: { min(max(dayIndex, 0), max(c.lengthDays - 1, 0)) + 1 },
                                            set: { dayIndex = $0 - 1 }),
-                            range: 1...max(c.lengthDays, 1), accent: Theme.coral,
+                            range: 1...max(c.lengthDays, 1), accent: Theme.clay,
                             showValue: false, showLabels: false)
                     .padding(.horizontal, 30).padding(.top, 14)
                 ScrollView {
@@ -57,7 +57,7 @@ struct TodayView: View {
                 Spacer()
             }
         }
-        .her75Background(Theme.coral)
+        .her75Background(Theme.clay)
         .sheet(isPresented: $editing) { if let c = challenge { EditHabitsSheet(challenge: c) } }
         .task {
             await SocialStore.shared.bootstrap()
@@ -141,7 +141,7 @@ struct HabitRow: View {
                     .lineLimit(2)
                     .animation(Motion.snappy, value: done)
                 if let comp = habit.completion(on: date) {
-                    Text("Logged \(comp.loggedAt.formatted(date: .omitted, time: .shortened))")
+                    Text(comp.loggedAt.formatted(date: .omitted, time: .shortened))
                         .font(Font2.sans(11, .semibold)).foregroundStyle(Theme.ink.opacity(0.4))
                 }
             }
@@ -281,11 +281,11 @@ struct DayCelebration: View {
         }
     }
 
-    // The same sage sticky note as the tasks, with the day number (serif italic).
+    // The sticky note — same paper as the task tiles, day number in serif italic.
     private var note: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Theme.sage.gradient)
+                .fill(Theme.olive.gradient)
                 .frame(width: 188, height: 188)
                 .shadow(color: .black.opacity(0.18), radius: 18, y: 14)
             Text("\(day)")
@@ -302,7 +302,7 @@ struct ConfettiBurst: View {
     @State private var start: Date? = nil
     @State private var finished = false
 
-    private static let palette: [Color] = [Theme.coral, Theme.periwinkle, Theme.sage, Theme.orchid, Theme.taupe]
+    private static let palette: [Color] = [Theme.clay, Theme.mist, Theme.olive, Theme.mauve, Theme.sand]
     private static let pieceCount = 120
     private static let gravity: CGFloat = 1350
 
@@ -417,7 +417,7 @@ struct EditHabitsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text(challenge.track.title).font(Font2.serif(20, .semibold)).foregroundStyle(Theme.ink)
+                    Text(challenge.displayTitle).font(Font2.serif(20, .semibold)).foregroundStyle(Theme.ink)
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }

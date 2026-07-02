@@ -698,6 +698,6 @@ extension SocialStore {
         let done = items.filter(\.done).count
         let json = (try? JSONEncoder().encode(items)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         await publish(day: challenge.currentDay, done: done, total: habits.count,
-                      challenge: challenge.track.title, name: challenge.ownerName, habitsJSON: json)
+                      challenge: challenge.displayTitle, name: challenge.ownerName, habitsJSON: json)
     }
 }

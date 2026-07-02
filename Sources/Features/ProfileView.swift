@@ -24,7 +24,7 @@ struct ProfileView: View {
                         PhotosPicker(selection: $photoItem, matching: .images) { ProfileAvatar(size: 128) }
                             .buttonStyle(PressableStyle())
                             .padding(.top, 26)
-                        Text(c.ownerName.isEmpty ? "That Girl" : c.ownerName)
+                        Text(c.ownerName.isEmpty ? "Her" : c.ownerName)
                             .font(Font2.serif(32, .semibold)).foregroundStyle(Theme.ink)
                             .padding(.top, 16)
                         bioLine
@@ -47,7 +47,7 @@ struct ProfileView: View {
                 Spacer()
             }
         }
-        .her75Background(Theme.orchid)
+        .her75Background(Theme.mauve)
         .task { await social.bootstrap() }
         .onChange(of: photoItem) { _, item in
             Task {
@@ -60,8 +60,8 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showPicker) {
             if let c = challenge {
-                ChallengePickerSheet(current: c.track) { t, drafts, start, days in
-                    switchChallenge(c, to: t, drafts: drafts, start: start, days: days)
+                ChallengePickerSheet(current: c.track) { t, drafts, start, days, customName in
+                    switchChallenge(c, to: t, drafts: drafts, start: start, days: days, customName: customName)
                 }
                 .presentationCornerRadius(34)
                 .presentationDragIndicator(.visible)
@@ -106,7 +106,7 @@ struct ProfileView: View {
         Button { showPicker = true } label: {
             VStack(alignment: .leading, spacing: 8) {
                 EyebrowLabel(text: "Your challenge", color: Theme.ink.opacity(0.45))
-                ChallengeStripCard(track: c.track, pillText: "Joined \(c.track.title)")
+                ChallengeStripCard(track: c.track, pillText: "Joined \(c.displayTitle)")
             }
         }
         .buttonStyle(PressableStyle())
@@ -115,9 +115,10 @@ struct ProfileView: View {
 
     /// Apply a switch configured in the picker flow: new tasks (as edited), start date and length.
     /// The old habits go away with their history, so their proof-photo files go first.
-    private func switchChallenge(_ c: Challenge, to t: ChallengeTrack, drafts: [HabitDraft], start: Date, days: Int) {
+    private func switchChallenge(_ c: Challenge, to t: ChallengeTrack, drafts: [HabitDraft], start: Date, days: Int, customName: String) {
         HabitActions.deleteProofPhotos(of: c)
         c.trackRaw = t.rawValue
+        c.customTitle = customName
         c.lengthDays = days
         c.startDate = start
         for h in c.habits { context.delete(h) }
@@ -140,7 +141,7 @@ struct ProfileView: View {
 /// applies the switch.
 struct ChallengePickerSheet: View {
     let current: ChallengeTrack
-    var onSwitch: (ChallengeTrack, [HabitDraft], Date, Int) -> Void
+    var onSwitch: (ChallengeTrack, [HabitDraft], Date, Int, String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var path: [Step] = []
     @State private var setup = OnboardingModel()
@@ -160,7 +161,7 @@ struct ChallengePickerSheet: View {
                                 .overlay(alignment: .topTrailing) {
                                     if t == current {
                                         Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 24)).foregroundStyle(Theme.coral)
+                                            .font(.system(size: 24)).foregroundStyle(Theme.clay)
                                             .background(Circle().fill(.white)).padding(8)
                                     }
                                 }
@@ -186,7 +187,7 @@ struct ChallengePickerSheet: View {
                         LengthStep(model: setup,
                                    ctaTitle: "Start this challenge",
                                    footnote: "This replaces your current tasks — progress starts fresh.") {
-                            onSwitch(setup.track, setup.habitDrafts, setup.startDate, setup.lengthDays)
+                            onSwitch(setup.track, setup.habitDrafts, setup.startDate, setup.lengthDays, setup.customName)
                             dismiss()
                         }
                     }

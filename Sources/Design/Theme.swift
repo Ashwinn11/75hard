@@ -1,36 +1,34 @@
 import SwiftUI
 
-/// Design system = reproduce the reference screenshots exactly: soft, editorial, near-white
-/// paper with one flat pastel accent per screen.
-/// All hex values are sampled from the reference PNGs.
+/// Design system: "soft luxe" — warm cream stationery, espresso ink, and one muted
+/// earth accent per screen. Spa-morning energy (Aesop / Rituals), not candy pastels.
 enum Theme {
 
     // MARK: Core
-    static let paper     = Color(hex: "FDFCFB")   // background — warm near-white
+    static let paper     = Color(hex: "FAF6EF")   // background — warm cream
     static let cream     = paper                  // back-compat alias
-    static let ink       = Color(hex: "171717")   // text + dark CTA
+    static let ink       = Color(hex: "2B2420")   // espresso — text + dark CTA
 
-    // MARK: Per-screen pastel accents
-    static let coral      = Color(hex: "E9887C")  // welcome / partner
-    static let periwinkle = Color(hex: "ADC1DE")  // app-preview / start / feedback
-    static let sage       = Color(hex: "A6BA94")  // friends / length / promise
-    static let orchid     = Color(hex: "D2A0C8")  // chips / quiz / custom
-    static let taupe      = Color(hex: "AA9281")  // choose / ready
+    // MARK: Per-screen earth accents
+    static let clay  = Color(hex: "C4765A")       // welcome / partner — terracotta
+    static let mist  = Color(hex: "94A8B1")       // app-preview / start — eucalyptus steam
+    static let olive = Color(hex: "6E7B54")       // friends / length / promise
+    static let mauve = Color(hex: "A98290")       // chips / quiz / custom — dusty rose
+    static let sand  = Color(hex: "B69B7C")       // choose / ready — warm camel
 
-    static let rose      = coral                  // back-compat: primary accent
-    static let roseDeep  = Color(hex: "E0746A")   // deeper coral (avatar gradient)
+    static let rose     = clay                    // back-compat: primary accent
+    static let clayDeep = Color(hex: "AD5F43")    // deeper clay (avatar gradient)
 
     // MARK: Surfaces / lines
-    static let chipFill  = Color(hex: "F3F2F2")
-    static let ring      = Color(hex: "ECE9E6")
-    static let sageBadge = sage
+    static let chipFill = Color(hex: "F1EAE0")
+    static let ring     = Color(hex: "E7DFD2")
 
     // MARK: Semantic
     static let textSecondary = ink.opacity(0.5)
 
-    // MARK: Gradients (kept subtle — the reference is mostly flat color)
-    static let roseGradient = LinearGradient(colors: [coral, roseDeep], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let plumGradient = LinearGradient(colors: [Color(hex: "2A2A2E"), ink], startPoint: .top, endPoint: .bottom)
+    // MARK: Gradients (kept subtle — surfaces are mostly flat)
+    static let clayGradient     = LinearGradient(colors: [clay, clayDeep], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let espressoGradient = LinearGradient(colors: [Color(hex: "3C332C"), ink], startPoint: .top, endPoint: .bottom)
 
     // MARK: Metrics
     static let pillRadius: CGFloat = 30
@@ -64,7 +62,7 @@ struct AppBackground: View {
     }
 
     private func meshColors(warmth: Double) -> [Color] {
-        let tint = accent ?? Theme.taupe
+        let tint = accent ?? Theme.sand
         let breath = Theme.paper.mix(with: tint, by: warmth)
         let corner = Theme.paper.mix(with: tint, by: 0.035)
         return [

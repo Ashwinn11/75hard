@@ -54,7 +54,7 @@ struct PaywallView: View {
             .scrollIndicators(.hidden)
 
             ctaPad(VStack(spacing: 10) {
-                PrimaryButton(title: busy ? "One sec…" : "Become Her", color: Theme.orchid) { buy() }
+                PrimaryButton(title: busy ? "One sec…" : "Become Her", color: Theme.mauve) { buy() }
                     .shimmerOnce(delay: 0.8)
                     .disabled(busy || selected == nil)
                     .opacity(selected == nil ? 0.5 : 1)
@@ -104,7 +104,7 @@ struct PaywallView: View {
                             .background(Theme.chipFill, in: Capsule())
                     }
                 } else {
-                    ProgressView().tint(Theme.orchid)
+                    ProgressView().tint(Theme.mauve)
                     Text("Loading plans…").font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -130,7 +130,7 @@ struct PaywallView: View {
             Text(p.title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
             if let badge = p.badge {
                 Text(badge).font(Font2.sans(10, .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.sageBadge, in: Capsule())
+                    .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.olive, in: Capsule())
             }
             Spacer()
             Text(p.price).font(Font2.sans(15, .heavy)).foregroundStyle(Theme.ink)
