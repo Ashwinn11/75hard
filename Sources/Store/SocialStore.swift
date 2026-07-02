@@ -397,16 +397,9 @@ final class SocialStore {
 
     /// A small (≤256px) JPEG of the user's profile photo, as a CloudKit asset, or nil if none set.
     private static func currentPhotoAsset() -> CKAsset? {
-        let src = ProfilePhoto.fileURL
-        guard FileManager.default.fileExists(atPath: src.path),
-              let img = UIImage(contentsOfFile: src.path) else { return nil }
-        let side: CGFloat = 256
-        let scale = min(1, side / max(img.size.width, img.size.height))
-        let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
-        let small = UIGraphicsImageRenderer(size: target).image { _ in
-            img.draw(in: CGRect(origin: .zero, size: target))
-        }
-        guard let data = small.jpegData(compressionQuality: 0.8) else { return nil }
+        guard let raw = try? Data(contentsOf: ProfilePhoto.fileURL),
+              let small = ImageProcessing.thumbnail(raw, maxPixel: 256),
+              let data = ImageProcessing.jpeg(small) else { return nil }
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("pfp_\(UUID().uuidString).jpg")
         guard (try? data.write(to: tmp)) != nil else { return nil }
         return CKAsset(fileURL: tmp)

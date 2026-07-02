@@ -24,31 +24,25 @@ struct FriendsView: View {
         VStack(spacing: 0) {
             // Custom header: "Your circle" title on the left, add-friends button on the right.
             HStack(alignment: .center) {
-                (Text("Your ").font(Font2.serif(28, .semibold)).foregroundColor(Theme.ink)
-                 + Text("circle").font(Font2.serif(28, .semibold)).italic().foregroundColor(accent))
+                SerifHeadline(lead: "Your", accent: "circle", size: 28, accentColor: accent, alignment: .leading)
 
                 Spacer()
 
                 if case .ready = social.phase {
-                    Button { Haptics.tap(); showAdd = true } label: {
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
-                            .frame(width: 44, height: 44).background(.white, in: Circle())
-                            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
-                            .overlay(alignment: .topTrailing) {
-                                if !social.incoming.isEmpty {
-                                    Text("\(social.incoming.count)")
-                                        .font(Font2.sans(11, .heavy)).foregroundStyle(.white)
-                                        .frame(minWidth: 20, minHeight: 20)
-                                        .padding(.horizontal, social.incoming.count > 9 ? 4 : 0)
-                                        .background(Theme.rose, in: Capsule())
-                                        .overlay(Capsule().stroke(.white, lineWidth: 2))
-                                        .offset(x: 5, y: -5)
-                                }
+                    CircleIconButton(icon: "person.badge.plus") { showAdd = true }
+                        .overlay(alignment: .topTrailing) {
+                            if !social.incoming.isEmpty {
+                                Text("\(social.incoming.count)")
+                                    .font(Font2.sans(11, .heavy)).foregroundStyle(.white)
+                                    .frame(minWidth: 20, minHeight: 20)
+                                    .padding(.horizontal, social.incoming.count > 9 ? 4 : 0)
+                                    .background(Theme.rose, in: Capsule())
+                                    .overlay(Capsule().stroke(.white, lineWidth: 2))
+                                    .offset(x: 5, y: -5)
                             }
-                    }
-                    .accessibilityLabel(social.incoming.isEmpty ? "Add friends"
-                        : "Add friends, \(social.incoming.count) requests")
+                        }
+                        .accessibilityLabel(social.incoming.isEmpty ? "Add friends"
+                            : "Add friends, \(social.incoming.count) requests")
                 }
             }
             .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 6)
@@ -191,7 +185,7 @@ private struct FriendProfileSheet: View {
 
                     if !friend.challenge.isEmpty {
                         VStack(spacing: 6) {
-                            Text("ON THE CHALLENGE").font(Font2.sans(11, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                            EyebrowLabel(text: "On the challenge", color: Theme.textSecondary)
                             Text(friend.challenge).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
                             Text(friend.total > 0 ? "Day \(friend.day) · \(friend.done)/\(friend.total) done today"
                                                   : "Day \(friend.day)")
@@ -261,12 +255,12 @@ private struct AddFriendsSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("YOUR INVITE").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        EyebrowLabel(text: "Your invite", color: Theme.textSecondary)
                         MyInvitePanel(name: myName, code: social.myCode, shareText: shareText, accent: accent, compact: true)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("ADD BY CODE").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        EyebrowLabel(text: "Add by code", color: Theme.textSecondary)
                         AddFriendField(accent: accent,
                             lookup: { try await social.lookup($0) },
                             add: { try await social.accept($0) })
@@ -275,7 +269,7 @@ private struct AddFriendsSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("SUGGESTED").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        EyebrowLabel(text: "Suggested", color: Theme.textSecondary)
                         if loading {
                             ProgressView().tint(accent).frame(maxWidth: .infinity).padding(.vertical, 24)
                         } else if visibleSuggestions.isEmpty {
@@ -372,7 +366,7 @@ private struct RequestsView: View {
                 }
                 if !social.incoming.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("NEW").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        EyebrowLabel(text: "New", color: Theme.textSecondary)
                         ForEach(social.incoming) { person in
                             RequestRow(person: person, accent: accent,
                                 accept: { accept(person) },
@@ -385,7 +379,7 @@ private struct RequestsView: View {
                 }
                 if !social.outgoing.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("SENT").font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+                        EyebrowLabel(text: "Sent", color: Theme.textSecondary)
                         ForEach(social.outgoing) { person in
                             PendingRow(person: person, cancel: { Task { await social.remove(person.id) } })
                         }

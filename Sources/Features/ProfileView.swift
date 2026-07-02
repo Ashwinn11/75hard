@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import WidgetKit
 
 struct ProfileView: View {
     @Environment(\.modelContext) private var context
@@ -10,23 +11,17 @@ struct ProfileView: View {
     @State private var showSettings = false
     @State private var showBioEdit = false
     @State private var social = SocialStore.shared
-    @AppStorage("profilePhotoV") private var photoVersion = 0
     private var challenge: Challenge? { challenges.first }
 
     var body: some View {
         VStack(spacing: 0) {
             if let c = challenge {
                 TabHeader(day: c.currentDay, showAvatar: false) {
-                    Button { Haptics.tap(); showSettings = true } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                            .frame(width: 44, height: 44).background(.white, in: Circle())
-                            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
-                    }
+                    CircleIconButton(icon: "gearshape.fill") { showSettings = true }
                 }
                 ScrollView {
                     VStack(spacing: 0) {
-                        PhotosPicker(selection: $photoItem, matching: .images) { avatar }
+                        PhotosPicker(selection: $photoItem, matching: .images) { ProfileAvatar(size: 128) }
                             .buttonStyle(PressableStyle())
                             .padding(.top, 26)
                         Text(c.ownerName.isEmpty ? "That Girl" : c.ownerName)
@@ -59,28 +54,13 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showPicker) {
             if let c = challenge {
-                ChallengePickerSheet(current: c.track) { switchChallenge(c, to: $0) }
+                ChallengePickerSheet(current: c.track) { t, drafts, start, days in
+                    switchChallenge(c, to: t, drafts: drafts, start: start, days: days)
+                }
             }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showBioEdit) { NavigationStack { EditBioView() } }
-    }
-
-    // Big centered avatar — tap to change the photo.
-    private var avatar: some View {
-        ZStack {
-            if let img = ProfilePhoto.load() {
-                Image(uiImage: img).resizable().scaledToFill()
-            } else {
-                Theme.roseGradient
-                Image(systemName: "person.fill")
-                    .font(.system(size: 52, weight: .semibold)).foregroundStyle(.white)
-            }
-        }
-        .frame(width: 128, height: 128).clipShape(Circle())
-        .overlay(Circle().stroke(.white, lineWidth: 3))
-        .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
-        .id(photoVersion)
     }
 
     @ViewBuilder private var bioLine: some View {
@@ -117,70 +97,49 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func switchChallenge(_ c: Challenge, to t: ChallengeTrack) {
+    /// Apply a switch configured in the picker flow: new tasks (as edited), start date and length.
+    /// The old habits go away with their history, so their proof-photo files go first.
+    private func switchChallenge(_ c: Challenge, to t: ChallengeTrack, drafts: [HabitDraft], start: Date, days: Int) {
+        HabitActions.deleteProofPhotos(of: c)
         c.trackRaw = t.rawValue
-        c.lengthDays = t.defaultDays
+        c.lengthDays = days
+        c.startDate = start
         for h in c.habits { context.delete(h) }
-        for (i, seed) in t.defaultHabits.enumerated() {
-            let h = Habit(seed: seed, order: i)
+        for (i, d) in drafts.enumerated() {
+            let h = Habit(title: d.title, subtitle: d.subtitle, color: d.color, icon: d.icon, photoName: d.photo, order: i)
             h.challenge = c
             context.insert(h)
         }
         try? context.save()
+        WidgetCenter.shared.reloadAllTimelines()
         Haptics.success()
+        Task { await SocialStore.shared.publishStatus(for: c) }
     }
 }
 
-// MARK: - Challenge card (onboarding photo-strip style) + picker
+// MARK: - Challenge picker (switching re-runs the onboarding setup steps)
 
-struct ChallengeStripCard: View {
-    let track: ChallengeTrack
-    var pillText: String? = nil      // override for the floating pill; nil → the track's joined count
-
-    private var pill: String? { pillText ?? (track.joined.isEmpty ? nil : track.joined) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ZStack(alignment: .top) {
-                HStack(spacing: 3) {
-                    ForEach(Array(track.photos.enumerated()), id: \.offset) { i, p in
-                        PhotoFill(name: p, fallback: HabitColor.palette[(abs(track.rawValue.hashValue) + i) % HabitColor.palette.count].gradient)
-                            .frame(maxWidth: .infinity).frame(height: 108).clipped()
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                if let pill {
-                    HStack(spacing: 5) {
-                        if pillText != nil {
-                            Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
-                        }
-                        Text(pill).font(Font2.sans(11, .bold))
-                    }
-                    .foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(.white, in: Capsule())
-                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
-                }
-            }
-            if pillText == nil {   // pill already names the challenge — don't repeat it below
-                Text(track.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
-            }
-        }
-    }
-}
-
+/// Picking a new challenge re-runs the real onboarding setup steps — task preview (editable),
+/// start date, length — on a scratch OnboardingModel. Only the final "Start this challenge"
+/// applies the switch.
 struct ChallengePickerSheet: View {
     let current: ChallengeTrack
-    var onSelect: (ChallengeTrack) -> Void
+    var onSwitch: (ChallengeTrack, [HabitDraft], Date, Int) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var pending: ChallengeTrack?
+    @State private var path: [Step] = []
+    @State private var setup = OnboardingModel()
+
+    private enum Step: Hashable { case tasks, start, length }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: 24) {
                     ForEach(ChallengeTrack.catalog) { t in
-                        Button { t == current ? dismiss() : (pending = t) } label: {
+                        Button {
+                            if t == current { dismiss() }
+                            else { Haptics.tap(); setup.pick(t); path.append(.tasks) }
+                        } label: {
                             ChallengeStripCard(track: t)
                                 .overlay(alignment: .topTrailing) {
                                     if t == current {
@@ -199,11 +158,24 @@ struct ChallengePickerSheet: View {
             .navigationTitle("Choose your challenge")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
-            .alert("Switch challenge?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
-                Button("Cancel", role: .cancel) { pending = nil }
-                Button("Switch", role: .destructive) { if let t = pending { onSelect(t) }; dismiss() }
-            } message: {
-                Text("This replaces your current tasks with \(pending?.title ?? "the new challenge")'s and resets their progress. Your day count and start date stay.")
+            .navigationDestination(for: Step.self) { step in
+                Group {
+                    switch step {
+                    case .tasks:
+                        ChallengeDetailStep(model: setup) { path.append(.start) }
+                    case .start:
+                        StartDateStep(model: setup) { path.append(.length) }
+                    case .length:
+                        LengthStep(model: setup,
+                                   ctaTitle: "Start this challenge",
+                                   footnote: "This replaces your current tasks — progress starts fresh.") {
+                            onSwitch(setup.track, setup.habitDrafts, setup.startDate, setup.lengthDays)
+                            dismiss()
+                        }
+                    }
+                }
+                .her75Background()
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
     }

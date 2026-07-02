@@ -136,4 +136,16 @@ final class Premium {
         apply(try await Purchases.shared.restorePurchases())
         return isPremium
     }
+
+    /// `restore()` folded into a user-facing outcome — shared by Settings and the paywall.
+    /// `message` is nil when an active subscription came back.
+    func restoreOutcome() async -> (restored: Bool, message: String?) {
+        do {
+            return try await restore()
+                ? (true, nil)
+                : (false, "No active subscription found on this Apple ID.")
+        } catch {
+            return (false, "Couldn't reach the App Store. Try again in a moment.")
+        }
+    }
 }

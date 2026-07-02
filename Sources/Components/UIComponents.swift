@@ -28,13 +28,6 @@ struct PrimaryButton: View {
     }
 }
 
-/// Ink (near-black) high-emphasis variant — used for "Save" / "Become Her".
-extension PrimaryButton {
-    static func ink(_ title: String, icon: String? = nil, action: @escaping () -> Void) -> PrimaryButton {
-        PrimaryButton(title: title, icon: icon, color: Theme.ink, textColor: .white, action: action)
-    }
-}
-
 extension View {
     /// Caps a primary CTA to ~75% of the screen width, centered — matching the onboarding
     /// button treatment (`ctaPad`) so buttons feel consistent across the app.
@@ -47,26 +40,60 @@ extension View {
     }
 }
 
-// MARK: - Chip
+// MARK: - Circular icon button (44pt, white) — the tab-header action style
 
-struct Chip: View {
-    let text: String
-    var emoji: String? = nil
-    var filled: Bool = true
+struct CircleIconButton: View {
+    let icon: String
+    var action: () -> Void
     var body: some View {
-        HStack(spacing: 6) {
-            if let emoji { Text(emoji).font(.system(size: 14)) }
-            Text(text).font(Font2.sans(14, .bold))
+        Button { Haptics.tap(); action() } label: {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                .frame(width: 44, height: 44).background(.white, in: Circle())
+                .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
         }
-        .foregroundStyle(Theme.ink)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background {
-            Capsule().fill(filled ? Theme.chipFill : Color.white)
+    }
+}
+
+// MARK: - Selector pill — ink-filled when selected, white with a ring otherwise
+
+struct SelectPill: View {
+    let text: String
+    let selected: Bool
+    var hPad: CGFloat = 18
+    var vPad: CGFloat = 11
+    var action: () -> Void
+    var body: some View {
+        Button { Haptics.select(); action() } label: {
+            Text(text).font(Font2.sans(15, .bold)).foregroundStyle(selected ? .white : Theme.ink)
+                .padding(.horizontal, hPad).padding(.vertical, vPad)
+                .background(selected ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color.white), in: Capsule())
+                .overlay(Capsule().stroke(Theme.ring, lineWidth: selected ? 0 : 1.5))
         }
-        .overlay {
-            if !filled { Capsule().stroke(Theme.ring, lineWidth: 1.5) }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Profile avatar (the user's photo, or the rose placeholder) in a white-ringed circle
+
+struct ProfileAvatar: View {
+    var size: CGFloat = 66
+    @AppStorage("profilePhotoV") private var photoVersion = 0
+
+    var body: some View {
+        ZStack {
+            if let img = ProfilePhoto.load() {
+                Image(uiImage: img).resizable().scaledToFill()
+            } else {
+                Theme.roseGradient
+                Image(systemName: "person.fill")
+                    .font(.system(size: size * 0.4, weight: .semibold)).foregroundStyle(.white)
+            }
         }
+        .frame(width: size, height: size).clipShape(Circle())
+        .overlay(Circle().stroke(.white, lineWidth: max(2, size / 44)))
+        .shadow(color: .black.opacity(0.10), radius: size / 9, y: size / 18)
+        .id(photoVersion)
     }
 }
 
@@ -184,6 +211,192 @@ struct RulerSlider: View {
             }
             .frame(height: showLabels ? 78 : 44)
         }
+    }
+}
+
+// MARK: - Challenge photo-strip card (4 photos + floating pill + title)
+
+/// The one challenge card used everywhere — onboarding's library, the profile card, and the
+/// switch-challenge flow — so a track always shows the same photos and fallback colors.
+struct ChallengeStripCard: View {
+    let track: ChallengeTrack
+    var pillText: String? = nil      // override for the floating pill; nil → the track's joined count
+    var height: CGFloat = 108
+    var showTitle = true
+
+    private var pill: String? { pillText ?? (track.joined.isEmpty ? nil : track.joined) }
+
+    // Deterministic palette seed (String.hashValue is randomized per launch).
+    private var seed: Int {
+        var h = 5381
+        for b in track.rawValue.utf8 { h = (h &* 33) &+ Int(b) }
+        return abs(h)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .top) {
+                HStack(spacing: 3) {
+                    ForEach(Array(track.photos.enumerated()), id: \.offset) { i, p in
+                        PhotoFill(name: p, fallback: HabitColor.palette[(seed + i) % HabitColor.palette.count].gradient)
+                            .frame(maxWidth: .infinity).frame(height: height).clipped()
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                if let pill {
+                    HStack(spacing: 5) {
+                        if pillText != nil {
+                            Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
+                        }
+                        Text(pill).font(Font2.sans(11, .bold))
+                    }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(.white, in: Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
+                }
+            }
+            if showTitle && pillText == nil {   // pill already names the challenge — don't repeat it below
+                Text(track.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
+            }
+        }
+    }
+}
+
+// MARK: - Editable task list (photo strip + "Create Daily Task +" + numbered sticky rows)
+
+/// Shared by onboarding's challenge detail (over HabitDrafts) and Today's edit sheet (over live
+/// Habits). Display + taps only — the owner supplies add/edit behavior and its own edit sheet.
+struct TaskListEditor: View {
+    let track: ChallengeTrack
+    let items: [(title: String, color: HabitColor)]
+    var onAdd: () -> Void
+    var onEdit: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ChallengeStripCard(track: track, height: 96, showTitle: false)
+            Button { onAdd() } label: {
+                Text("Create Daily Task +").font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
+                    .frame(maxWidth: .infinity).padding(.vertical, 15)
+                    .background(Theme.chipFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+                    row(i, item)
+                    if i < items.count - 1 { Divider().padding(.leading, 62) }
+                }
+            }
+        }
+    }
+
+    // The "sticky paper" number-tile rows — the soft shadow gives the lifted sticky-note feel.
+    private func row(_ i: Int, _ item: (title: String, color: HabitColor)) -> some View {
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(item.color.gradient)
+                    .frame(width: 48, height: 48)
+                    .shadow(color: .black.opacity(0.22), radius: 5, x: 0, y: 4)
+                Text("\(i + 1)").font(Font2.serif(24, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.8))
+            }
+            Text(item.title).font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button { onEdit(i) } label: {
+                Image(systemName: "pencil").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.ink.opacity(0.55))
+                    .frame(width: 30, height: 30).background(Theme.chipFill, in: Circle())
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Edit-task sheet (sticky note + color swatches) — edits a HabitDraft binding
+
+struct EditTaskSheet: View {
+    @Binding var draft: HabitDraft
+    var onSave: () -> Void
+    var onDelete: (() -> Void)?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Text("Edit task").font(Font2.serif(24, .semibold)).foregroundStyle(Theme.ink).padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("New daily task", text: $draft.title)
+                    .font(Font2.sans(18, .bold)).foregroundStyle(Theme.ink)
+                TextField("Add a note", text: $draft.subtitle)
+                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.7))
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+            .background(draft.color.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            HStack(spacing: 12) {
+                ForEach(HabitColor.palette) { c in
+                    Circle().fill(c.gradient).frame(width: 30, height: 30)
+                        .overlay(Circle().stroke(Theme.ink, lineWidth: draft.color == c ? 2.5 : 0))
+                        .onTapGesture { Haptics.select(); draft.color = c }
+                }
+            }
+
+            HStack(spacing: 12) {
+                if let onDelete {
+                    Button { onDelete(); dismiss() } label: {
+                        Text("Delete").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
+                            .frame(maxWidth: .infinity).padding(.vertical, 15)
+                            .background(Theme.chipFill, in: Capsule())
+                    }
+                }
+                Button { onSave(); dismiss() } label: {
+                    Text("Save").font(Font2.sans(16, .bold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 15)
+                        .background(Theme.ink, in: Capsule())
+                }
+            }
+            Spacer()
+        }
+        .padding(24)
+        .presentationDetents([.height(380)])
+        .her75Background()
+    }
+}
+
+// MARK: - Length picker (ruler + preset pills + date-range caption)
+
+/// Shared by onboarding's LengthStep and Settings' DurationView.
+struct LengthPicker: View {
+    @Binding var days: Int
+    let startDate: Date
+    var showsCustomBadge = false        // onboarding shows a "Custom" state pill under the presets
+
+    static let presets = [7, 14, 30, 75]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.sage)
+                .padding(.horizontal, 16)
+            HStack(spacing: 10) {
+                ForEach(Self.presets, id: \.self) { p in
+                    SelectPill(text: "\(p)", selected: days == p) { withAnimation { days = p } }
+                }
+            }.padding(.top, 20)
+            if showsCustomBadge {
+                Text("Custom")
+                    .font(Font2.sans(15, .bold)).foregroundStyle(Self.presets.contains(days) ? Theme.ink : .white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    .background(Self.presets.contains(days) ? AnyShapeStyle(Color.white) : AnyShapeStyle(Theme.ink), in: Capsule())
+                    .overlay(Capsule().stroke(Theme.ring, lineWidth: Self.presets.contains(days) ? 1.5 : 0))
+                    .padding(.horizontal, 30).padding(.top, 10)
+            }
+            Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
+        }
+    }
+
+    private var range: String {
+        let end = Calendar.current.date(byAdding: .day, value: days - 1, to: startDate) ?? startDate
+        return "\(startDate.formatted(.dateTime.month(.abbreviated).day())) to \(end.formatted(.dateTime.month(.abbreviated).day()))"
     }
 }
 

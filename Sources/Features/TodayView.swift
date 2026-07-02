@@ -16,12 +16,7 @@ struct TodayView: View {
         VStack(spacing: 0) {
             if let c = challenge {
                 TabHeader(day: min(max(dayIndex, 0), max(c.lengthDays - 1, 0)) + 1) {
-                    Button { editing = true } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
-                            .frame(width: 44, height: 44).background(.white, in: Circle())
-                            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
-                    }
+                    CircleIconButton(icon: "pencil") { editing = true }
                 }
                 RulerSlider(value: Binding(get: { min(max(dayIndex, 0), max(c.lengthDays - 1, 0)) + 1 },
                                            set: { dayIndex = $0 - 1 }),
@@ -256,13 +251,12 @@ struct TabHeader<Trailing: View>: View {
     let day: Int
     var showAvatar = true
     @ViewBuilder var trailing: () -> Trailing
-    @AppStorage("profilePhotoV") private var photoVersion = 0
 
     var body: some View {
         HStack(alignment: .top) {
             if showAvatar {
                 ZStack(alignment: .bottom) {
-                    avatar
+                    ProfileAvatar()
                     dayPill.offset(y: 13)
                 }
             }
@@ -279,21 +273,6 @@ struct TabHeader<Trailing: View>: View {
             .background(.white, in: Capsule())
             .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
     }
-
-    private var avatar: some View {
-        ZStack {
-            if let img = ProfilePhoto.load() {
-                Image(uiImage: img).resizable().scaledToFill()
-            } else {
-                Theme.roseGradient
-                Image(systemName: "person.fill").font(.system(size: 24, weight: .semibold)).foregroundStyle(.white)
-            }
-        }
-        .frame(width: 66, height: 66).clipShape(Circle())
-        .overlay(Circle().stroke(.white, lineWidth: 2))
-        .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
-        .id(photoVersion)
-    }
 }
 
 // MARK: - Edit tasks sheet (the pencil)
@@ -307,21 +286,10 @@ struct EditHabitsSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    photoStrip
-                    Button { addTask() } label: {
-                        Text("Create Daily Task +").font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
-                            .frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(Theme.chipFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    VStack(spacing: 0) {
-                        ForEach(Array(challenge.habitsOrdered.enumerated()), id: \.element.id) { i, h in
-                            taskRow(i, h)
-                            if i < challenge.habitsOrdered.count - 1 { Divider().padding(.leading, 62) }
-                        }
-                    }
-                }
-                .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 24)
+                TaskListEditor(track: challenge.track,
+                               items: challenge.habitsOrdered.map { ($0.title, $0.color) },
+                               onAdd: addTask, onEdit: { editing = challenge.habitsOrdered[$0] })
+                    .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 24)
             }
             .her75Background()
             .navigationBarTitleDisplayMode(.inline)
@@ -331,38 +299,24 @@ struct EditHabitsSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .sheet(item: $editing) { EditHabitSheet(habit: $0, canDelete: challenge.habitsOrdered.count > 1) }
+            .sheet(item: $editing) { h in
+                // The shared sticky-note editor, driving a LIVE habit through a draft binding.
+                EditTaskSheet(draft: draftBinding(h),
+                              onSave: { Haptics.tap() },
+                              onDelete: challenge.habitsOrdered.count > 1
+                                  ? { context.delete(h); try? context.save() } : nil)
+            }
         }
     }
 
-    // Same sticky-note row as the onboarding challenge detail.
-    private func taskRow(_ i: Int, _ h: Habit) -> some View {
-        HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(h.color.gradient)
-                    .frame(width: 46, height: 46)
-                    .shadow(color: .black.opacity(0.20), radius: 5, x: 0, y: 4)
-                Text("\(i + 1)").font(Font2.serif(22, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.8))
-            }
-            Text(h.title).font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button { editing = h } label: {
-                Image(systemName: "pencil").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.ink.opacity(0.55))
-                    .frame(width: 30, height: 30).background(Theme.chipFill, in: Circle())
-            }
-        }
-        .padding(.vertical, 8)
-    }
-
-    private var photoStrip: some View {
-        HStack(spacing: 3) {
-            ForEach(Array(challenge.track.photos.enumerated()), id: \.offset) { _, p in
-                PhotoFill(name: p, fallback: HabitColor.blush.gradient)
-                    .frame(maxWidth: .infinity).frame(height: 118).clipped()
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    /// Live Habit ⇄ HabitDraft adapter: every edit writes straight through to the model.
+    private func draftBinding(_ h: Habit) -> Binding<HabitDraft> {
+        Binding(
+            get: { HabitDraft(title: h.title, subtitle: h.subtitle, color: h.color, icon: h.icon, photo: h.photoName) },
+            set: { d in
+                h.title = d.title; h.subtitle = d.subtitle; h.colorRaw = d.color.rawValue
+                try? context.save()
+            })
     }
 
     private func addTask() {
@@ -371,60 +325,6 @@ struct EditHabitsSheet: View {
         context.insert(h)
         try? context.save()
         editing = h
-    }
-}
-
-// Edit a single live habit (sticky note + color swatches + delete/save) — mirrors onboarding's EditTaskSheet.
-struct EditHabitSheet: View {
-    let habit: Habit
-    var canDelete: Bool
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Text("Edit task").font(Font2.serif(24, .semibold)).foregroundStyle(Theme.ink).padding(.top, 8)
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("New daily task", text: bind(\.title))
-                    .font(Font2.sans(18, .bold)).foregroundStyle(Theme.ink)
-                TextField("Add a note", text: bind(\.subtitle))
-                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.7))
-            }
-            .padding(18).frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .background(habit.color.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-            HStack(spacing: 12) {
-                ForEach(HabitColor.palette) { c in
-                    Circle().fill(c.gradient).frame(width: 30, height: 30)
-                        .overlay(Circle().stroke(Theme.ink, lineWidth: habit.color == c ? 2.5 : 0))
-                        .onTapGesture { Haptics.select(); habit.colorRaw = c.rawValue; try? context.save() }
-                }
-            }
-
-            HStack(spacing: 12) {
-                if canDelete {
-                    Button { context.delete(habit); try? context.save(); dismiss() } label: {
-                        Text("Delete").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
-                            .frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(Theme.chipFill, in: Capsule())
-                    }
-                }
-                Button { try? context.save(); dismiss() } label: {
-                    Text("Save").font(Font2.sans(16, .bold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        .background(Theme.ink, in: Capsule())
-                }
-            }
-            Spacer()
-        }
-        .padding(24)
-        .presentationDetents([.height(380)])
-        .her75Background()
-    }
-
-    private func bind(_ key: ReferenceWritableKeyPath<Habit, String>) -> Binding<String> {
-        Binding(get: { habit[keyPath: key] }, set: { habit[keyPath: key] = $0; try? context.save() })
     }
 }
 

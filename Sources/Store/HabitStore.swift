@@ -53,15 +53,26 @@ enum HabitActions {
             }
             context.delete(existing)
         } else {
-            let start = cal.startOfDay(for: habit.challenge?.startDate ?? date)
-            let dayIndex = (cal.dateComponents([.day], from: start, to: cal.startOfDay(for: date)).day ?? 0) + 1
             let when = cal.isDateInToday(date) ? Date() : cal.startOfDay(for: date)
-            let c = Completion(loggedAt: when, dayIndex: dayIndex)
+            let c = Completion(loggedAt: when, dayIndex: habit.challenge?.dayIndex(of: date) ?? 1)
             c.habit = habit
             context.insert(c)
         }
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    /// Delete every proof-photo file a challenge's completions reference. Call BEFORE deleting the
+    /// challenge or its habits: the cascade removes the Completion records but not their files,
+    /// which would otherwise pile up invisibly in the shared container.
+    static func deleteProofPhotos(of challenge: Challenge) {
+        for habit in challenge.habits {
+            for completion in habit.completions {
+                if let name = completion.photoFilename {
+                    try? FileManager.default.removeItem(at: AppGroup.photosURL.appendingPathComponent(name))
+                }
+            }
+        }
     }
 
     /// Attach a proof photo to a habit's completion on a date (creating the completion if needed).
@@ -74,10 +85,8 @@ enum HabitActions {
                 try? FileManager.default.removeItem(at: AppGroup.photosURL.appendingPathComponent(old))
             }
         } else {
-            let start = cal.startOfDay(for: habit.challenge?.startDate ?? date)
-            let dayIndex = (cal.dateComponents([.day], from: start, to: cal.startOfDay(for: date)).day ?? 0) + 1
             let when = cal.isDateInToday(date) ? Date() : cal.startOfDay(for: date)
-            completion = Completion(loggedAt: when, dayIndex: dayIndex)
+            completion = Completion(loggedAt: when, dayIndex: habit.challenge?.dayIndex(of: date) ?? 1)
             completion.habit = habit
             context.insert(completion)
         }

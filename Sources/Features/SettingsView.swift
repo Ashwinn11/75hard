@@ -91,21 +91,15 @@ struct SettingsView: View {
     private func restorePurchases() {
         restoring = true
         Task {
-            do {
-                restoreMessage = try await Premium.shared.restore()
-                    ? "Your subscription is active — you're all set."
-                    : "No active subscription found on this Apple ID."
-            } catch {
-                restoreMessage = "Couldn't reach the App Store. Try again in a moment."
-            }
+            let (restored, message) = await Premium.shared.restoreOutcome()
+            restoreMessage = restored ? "Your subscription is active — you're all set." : message
             restoring = false
         }
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
-                .font(Font2.sans(12, .bold)).tracking(1.5).foregroundStyle(Theme.textSecondary)
+            EyebrowLabel(text: title, color: Theme.textSecondary)
                 .padding(.leading, 4)
             VStack(spacing: 0) { content() }
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -118,7 +112,11 @@ struct SettingsView: View {
     private func wipeAll() {
         Haptics.rigid()
         Task { await social.wipe() }
-        if let c = challenge { context.delete(c); try? context.save() }
+        if let c = challenge {
+            HabitActions.deleteProofPhotos(of: c)   // the cascade drops the records, not the files
+            context.delete(c)
+            try? context.save()
+        }
         dismiss()
     }
 }
@@ -171,7 +169,7 @@ struct EditNameView: View {
             Text("Shown to friends on your invite and your check-ins.")
                 .font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
             Spacer()
-            PrimaryButton.ink("Save") { save() }.ctaWidth()
+            PrimaryButton(title: "Save", color: Theme.orchid) { save() }.ctaWidth()
         }
         .padding(20)
         .background(Theme.paper.ignoresSafeArea())
@@ -210,7 +208,7 @@ struct EditBioView: View {
                 .font(Font2.sans(11, .medium)).foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             Spacer()
-            PrimaryButton.ink("Save") { save() }.ctaWidth()
+            PrimaryButton(title: "Save", color: Theme.sage) { save() }.ctaWidth()
         }
         .padding(20)
         .background(Theme.paper.ignoresSafeArea())
@@ -234,43 +232,22 @@ struct DurationView: View {
     @Query(sort: \Challenge.createdAt, order: .reverse) private var challenges: [Challenge]
     @State private var days = 75
     private var challenge: Challenge? { challenges.first }
-    private let presets = [7, 14, 30, 75]
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.sage)
-                .padding(.horizontal, 16)
-            HStack(spacing: 10) {
-                ForEach(presets, id: \.self) { p in
-                    Button { withAnimation { days = p }; Haptics.select() } label: {
-                        Text("\(p)").font(Font2.sans(15, .bold)).foregroundStyle(days == p ? .white : Theme.ink)
-                            .padding(.horizontal, 18).padding(.vertical, 11)
-                            .background(days == p ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color.white), in: Capsule())
-                            .overlay(Capsule().stroke(Theme.ring, lineWidth: days == p ? 0 : 1.5))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.top, 20)
-            Text(rangeText).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
+            LengthPicker(days: $days, startDate: challenge?.startDate ?? Date())
             if let c = challenge, days < c.currentDay {
                 Text("You're already on day \(c.currentDay) — the challenge can't be shorter than that.")
                     .font(Font2.sans(12, .medium)).foregroundStyle(Theme.rose)
                     .multilineTextAlignment(.center).padding(.horizontal, 30).padding(.top, 10)
             }
             Spacer()
-            PrimaryButton.ink("Save") { save() }.ctaWidth().padding(.bottom, 22)
+            PrimaryButton(title: "Save", color: Theme.taupe) { save() }.ctaWidth().padding(.bottom, 22)
         }
         .background(Theme.paper.ignoresSafeArea())
         .navigationTitle("Challenge length").navigationBarTitleDisplayMode(.inline)
         .onAppear { days = challenge?.lengthDays ?? 75 }
-    }
-
-    private var rangeText: String {
-        guard let c = challenge else { return "" }
-        let end = Calendar.current.date(byAdding: .day, value: days - 1, to: c.startDate) ?? c.startDate
-        return "\(c.startDate.formatted(.dateTime.month(.abbreviated).day())) to \(end.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
     private func save() {

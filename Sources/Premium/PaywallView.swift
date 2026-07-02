@@ -152,12 +152,8 @@ struct PaywallView: View {
         guard !busy else { return }
         busy = true; message = nil
         Task {
-            do {
-                if try await premium.restore() { Haptics.success(); unlock() }
-                else { restoreMessage = "No active subscription found on this Apple ID." }
-            } catch {
-                restoreMessage = "Couldn't reach the App Store. Try again in a moment."
-            }
+            let (restored, msg) = await premium.restoreOutcome()
+            if restored { Haptics.success(); unlock() } else { restoreMessage = msg }
             busy = false
         }
     }

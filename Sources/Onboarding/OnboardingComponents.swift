@@ -100,7 +100,10 @@ private struct MarqueeColumn: View {
     }
     private func gradientFor(_ n: String) -> LinearGradient {
         let palette: [HabitColor] = [.blush, .lilac, .sand, .sage, .rose, .sky]
-        return palette[abs(n.hashValue) % palette.count].gradient
+        // Deterministic hash (String.hashValue is randomized per launch — colors would reshuffle).
+        var h = 5381
+        for b in n.utf8 { h = (h &* 33) &+ Int(b) }
+        return palette[abs(h) % palette.count].gradient
     }
 }
 
@@ -190,75 +193,7 @@ private struct FlowChips: View {
     }
 }
 
-// MARK: - Track cluster (3 overlapping photos on a Choose-your-hard card)
-
-struct TrackCluster: View {
-    let prefix: String                 // e.g. "track_her" → track_her_1/2/3
-    let colors: [HabitColor]
-    var body: some View {
-        HStack(spacing: -12) {
-            ForEach(1...3, id: \.self) { i in
-                PhotoFill(name: "\(prefix)_\(i)", fallback: colors[(i - 1) % colors.count].gradient)
-                    .frame(width: 46, height: 58)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white, lineWidth: 2))
-                    .zIndex(Double(i))
-            }
-        }
-    }
-}
-
-// MARK: - Edit-task sheet (sticky note + color swatches)
-
-struct EditTaskSheet: View {
-    @Binding var draft: HabitDraft
-    var onSave: () -> Void
-    var onDelete: (() -> Void)?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Text("Edit task").font(Font2.serif(24, .semibold)).foregroundStyle(Theme.ink).padding(.top, 8)
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("New daily task", text: $draft.title)
-                    .font(Font2.sans(18, .bold)).foregroundStyle(Theme.ink)
-                TextField("Add a note", text: $draft.subtitle)
-                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.7))
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .background(draft.color.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-            HStack(spacing: 12) {
-                ForEach(HabitColor.palette) { c in
-                    Circle().fill(c.gradient).frame(width: 30, height: 30)
-                        .overlay(Circle().stroke(Theme.ink, lineWidth: draft.color == c ? 2.5 : 0))
-                        .onTapGesture { Haptics.select(); draft.color = c }
-                }
-            }
-
-            HStack(spacing: 12) {
-                if let onDelete {
-                    Button { onDelete(); dismiss() } label: {
-                        Text("Delete").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
-                            .frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(Theme.chipFill, in: Capsule())
-                    }
-                }
-                Button { onSave(); dismiss() } label: {
-                    Text("Save").font(Font2.sans(16, .bold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        .background(Theme.ink, in: Capsule())
-                }
-            }
-            Spacer()
-        }
-        .padding(24)
-        .presentationDetents([.height(380)])
-        .her75Background()
-    }
-}
+// EditTaskSheet lives in Sources/Components/UIComponents.swift — it's shared with Today's edit flow.
 
 // MARK: - Signature pad (sign your promise)
 

@@ -2,19 +2,8 @@ import SwiftUI
 import SwiftData
 
 // MARK: - Model
-
-struct HabitDraft: Identifiable {
-    let id = UUID()
-    var title: String
-    var subtitle: String
-    var color: HabitColor
-    var icon: String
-    var photo: String
-    init(seed: HabitSeed) { title = seed.title; subtitle = seed.subtitle; color = seed.color; icon = seed.icon; photo = seed.photo }
-    init(title: String, subtitle: String, color: HabitColor, icon: String, photo: String = "") {
-        self.title = title; self.subtitle = subtitle; self.color = color; self.icon = icon; self.photo = photo
-    }
-}
+// (HabitDraft lives in Sources/Models/Models.swift — the widget target compiles the shared
+// EditTaskSheet in UIComponents, so the draft type must be visible there too.)
 
 @Observable
 final class OnboardingModel {
@@ -350,7 +339,7 @@ private struct ChooseChallengeStep: View {
             ScrollView {
                 VStack(spacing: 24) {
                     ForEach(ChallengeTrack.catalog) { t in
-                        Button { Haptics.select(); model.pick(t); onNext() } label: { challengeCard(t) }
+                        Button { Haptics.select(); model.pick(t); onNext() } label: { ChallengeStripCard(track: t) }
                             .buttonStyle(PressableStyle())
                     }
                 }
@@ -358,37 +347,12 @@ private struct ChooseChallengeStep: View {
             }
         }
     }
-
-    private func challengeCard(_ t: ChallengeTrack) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ZStack(alignment: .top) {
-                HStack(spacing: 3) {
-                    ForEach(Array(t.photos.enumerated()), id: \.offset) { i, p in
-                        PhotoFill(name: p, fallback: stripFallback(t, i))
-                            .frame(maxWidth: .infinity).frame(height: 108).clipped()
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                Text(t.joined).font(Font2.sans(11, .bold)).foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(.white, in: Capsule())
-                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
-                    .offset(y: -11)
-            }
-            Text(t.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
-        }
-    }
-
-    private func stripFallback(_ t: ChallengeTrack, _ i: Int) -> LinearGradient {
-        let palette = HabitColor.palette
-        return palette[(abs(t.rawValue.hashValue) + i) % palette.count].gradient
-    }
-
 }
 
 // MARK: - 8 Challenge detail (numbered sticky task list, editable)
+// Internal: the Profile challenge picker re-runs this + StartDateStep + LengthStep when switching.
 
-private struct ChallengeDetailStep: View {
+struct ChallengeDetailStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
     @State private var editing: Int?
@@ -399,18 +363,9 @@ private struct ChallengeDetailStep: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(model.track.title).font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
                         .frame(maxWidth: .infinity, alignment: .center)
-                    photoStrip
-                    Button { addTask() } label: {
-                        Text("Create Daily Task +").font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
-                            .frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(Theme.chipFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    VStack(spacing: 0) {
-                        ForEach(Array(model.habitDrafts.enumerated()), id: \.element.id) { i, d in
-                            taskRow(i, d)
-                            if i < model.habitDrafts.count - 1 { Divider().padding(.leading, 62) }
-                        }
-                    }
+                    TaskListEditor(track: model.track,
+                                   items: model.habitDrafts.map { ($0.title, $0.color) },
+                                   onAdd: addTask, onEdit: { editing = $0 })
                     testimonials.padding(.top, 6)
                 }
                 .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
@@ -423,42 +378,6 @@ private struct ChallengeDetailStep: View {
                               onDelete: model.habitDrafts.count > 1 ? { model.habitDrafts.remove(at: i) } : nil)
             }
         }
-    }
-
-    private var photoStrip: some View {
-        ZStack(alignment: .top) {
-            HStack(spacing: 3) {
-                ForEach(Array(model.track.photos.enumerated()), id: \.offset) { i, p in
-                    PhotoFill(name: p, fallback: HabitColor.blush.gradient)
-                        .frame(maxWidth: .infinity).frame(height: 96).clipped()
-                }
-            }.clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            if !model.track.joined.isEmpty {
-                Text(model.track.joined).font(Font2.sans(11, .bold)).foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 10).padding(.vertical, 5).background(.white, in: Capsule())
-                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
-            }
-        }
-    }
-
-    // The "sticky paper showing number" rows — upright tile; the soft card shadow gives the lifted sticky-note feel.
-    private func taskRow(_ i: Int, _ d: HabitDraft) -> some View {
-        HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(d.color.gradient)
-                    .frame(width: 48, height: 48)
-                    .shadow(color: .black.opacity(0.22), radius: 5, x: 0, y: 4)
-                Text("\(i + 1)").font(Font2.serif(24, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.8))
-            }
-            Text(d.title).font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button { editing = i } label: {
-                Image(systemName: "pencil").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.ink.opacity(0.55))
-                    .frame(width: 30, height: 30).background(Theme.chipFill, in: Circle())
-            }
-        }
-        .padding(.vertical, 8)
     }
 
     private func addTask() {
@@ -495,7 +414,7 @@ private struct ChallengeDetailStep: View {
 
 // MARK: - 10 Start date
 
-private struct StartDateStep: View {
+struct StartDateStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
     @State private var mode = 0
@@ -505,7 +424,11 @@ private struct StartDateStep: View {
             Spacer()
             Text(bigWord).font(Font2.sans(64, .heavy)).foregroundStyle(Theme.ink).contentTransition(.numericText())
             HStack(spacing: 10) {
-                pill("Today", 0); pill("Tomorrow", 1); pill("Custom", 2)
+                ForEach(Array(["Today", "Tomorrow", "Custom"].enumerated()), id: \.offset) { i, t in
+                    SelectPill(text: t, selected: mode == i, hPad: 20, vPad: 12) {
+                        withAnimation { mode = i }; apply(i)
+                    }
+                }
             }.padding(.top, 22)
             if mode == 2 {
                 DatePicker("", selection: $model.startDate, in: Date()..., displayedComponents: .date)
@@ -523,14 +446,6 @@ private struct StartDateStep: View {
         switch mode { case 0: return "today"; case 1: return "tomorrow"
         default: return model.startDate.formatted(.dateTime.month(.abbreviated).day()) }
     }
-    private func pill(_ t: String, _ i: Int) -> some View {
-        Button { withAnimation { mode = i }; apply(i); Haptics.select() } label: {
-            Text(t).font(Font2.sans(15, .bold)).foregroundStyle(mode == i ? .white : Theme.ink)
-                .padding(.horizontal, 20).padding(.vertical, 12)
-                .background(mode == i ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color.white), in: Capsule())
-                .overlay(Capsule().stroke(Theme.ring, lineWidth: mode == i ? 0 : 1.5))
-        }.buttonStyle(.plain)
-    }
     private func apply(_ i: Int) {
         let cal = Calendar.current
         if i == 0 { model.startDate = cal.startOfDay(for: Date()) }
@@ -540,41 +455,23 @@ private struct StartDateStep: View {
 
 // MARK: - 11 Length
 
-private struct LengthStep: View {
+struct LengthStep: View {
     @Bindable var model: OnboardingModel
+    var ctaTitle = "Continue"
+    var footnote: String? = nil            // e.g. the switch flow's "replaces your tasks" warning
     var onNext: () -> Void
-    private let presets = [7, 14, 30, 75]
     var body: some View {
         VStack(spacing: 0) {
             TypewriterHeadline(lead: "How long is your", accent: "challenge?", size: 30, accentColor: Theme.rose, alignment: .center).padding(.top, 6)
             Spacer()
-            RulerSlider(value: $model.lengthDays, range: 1...75, unit: "days", accent: Theme.sage)
-                .padding(.horizontal, 16)
-            HStack(spacing: 10) {
-                ForEach(presets, id: \.self) { p in
-                    Button { withAnimation { model.lengthDays = p }; Haptics.select() } label: {
-                        Text("\(p)").font(Font2.sans(15, .bold)).foregroundStyle(model.lengthDays == p ? .white : Theme.ink)
-                            .padding(.horizontal, 18).padding(.vertical, 11)
-                            .background(model.lengthDays == p ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color.white), in: Capsule())
-                            .overlay(Capsule().stroke(Theme.ring, lineWidth: model.lengthDays == p ? 0 : 1.5))
-                    }.buttonStyle(.plain)
-                }
-            }.padding(.top, 20)
-            // "Custom" pill — highlights when the value isn't one of the presets
-            Text("Custom")
-                .font(Font2.sans(15, .bold)).foregroundStyle(presets.contains(model.lengthDays) ? Theme.ink : .white)
-                .frame(maxWidth: .infinity).padding(.vertical, 13)
-                .background(presets.contains(model.lengthDays) ? AnyShapeStyle(Color.white) : AnyShapeStyle(Theme.ink), in: Capsule())
-                .overlay(Capsule().stroke(Theme.ring, lineWidth: presets.contains(model.lengthDays) ? 1.5 : 0))
-                .padding(.horizontal, 30).padding(.top, 10)
-            Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
+            LengthPicker(days: $model.lengthDays, startDate: model.startDate, showsCustomBadge: true)
             Spacer()
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.taupe, action: onNext))
+            if let footnote {
+                Text(footnote).font(Font2.sans(12, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+                    .multilineTextAlignment(.center).padding(.horizontal, 40).padding(.bottom, 10)
+            }
+            ctaPad(PrimaryButton(title: ctaTitle, color: Theme.taupe, action: onNext))
         }
-    }
-    private var range: String {
-        let end = Calendar.current.date(byAdding: .day, value: model.lengthDays - 1, to: model.startDate) ?? model.startDate
-        return "\(model.startDate.formatted(.dateTime.month(.abbreviated).day())) to \(end.formatted(.dateTime.month(.abbreviated).day()))"
     }
 }
 
@@ -701,9 +598,7 @@ private struct ReadyStep: View {
         VStack(spacing: 0) {
             VStack(spacing: 2) {
                 Text("Congrats.").font(Font2.serif(34, .semibold)).foregroundStyle(Theme.ink)
-                (Text("You're ").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink)
-                 + Text("ready").font(Font2.serif(30, .semibold)).italic().foregroundColor(Theme.rose)
-                 + Text(" to start").font(Font2.serif(30, .semibold)).foregroundColor(Theme.ink))
+                SerifHeadline(lead: "You're", accent: "ready", trail: "to start", size: 30, accentColor: Theme.rose)
             }
             .multilineTextAlignment(.center).padding(.top, 10).padding(.horizontal, 28)
             Spacer()

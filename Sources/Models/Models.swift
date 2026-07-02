@@ -135,6 +135,21 @@ struct HabitSeed {
     }
 }
 
+/// An editable, not-yet-saved habit — what onboarding and the shared EditTaskSheet work on
+/// before (or instead of) touching a live SwiftData Habit.
+struct HabitDraft: Identifiable {
+    let id = UUID()
+    var title: String
+    var subtitle: String
+    var color: HabitColor
+    var icon: String
+    var photo: String
+    init(seed: HabitSeed) { title = seed.title; subtitle = seed.subtitle; color = seed.color; icon = seed.icon; photo = seed.photo }
+    init(title: String, subtitle: String, color: HabitColor, icon: String, photo: String = "") {
+        self.title = title; self.subtitle = subtitle; self.color = color; self.icon = icon; self.photo = photo
+    }
+}
+
 // MARK: - SwiftData models
 
 @Model
@@ -158,14 +173,15 @@ final class Challenge {
 
     var track: ChallengeTrack { ChallengeTrack(rawValue: trackRaw) ?? .her75 }
 
-    /// 1-based current day, clamped to [1, lengthDays].
-    var currentDay: Int {
+    /// 1-based day number of `date` within the challenge (day 1 = the start date's day).
+    func dayIndex(of date: Date) -> Int {
         let cal = Calendar.current
         let start = cal.startOfDay(for: startDate)
-        let today = cal.startOfDay(for: Date())
-        let days = (cal.dateComponents([.day], from: start, to: today).day ?? 0) + 1
-        return min(max(days, 1), lengthDays)
+        return (cal.dateComponents([.day], from: start, to: cal.startOfDay(for: date)).day ?? 0) + 1
     }
+
+    /// 1-based current day, clamped to [1, lengthDays].
+    var currentDay: Int { min(max(dayIndex(of: Date()), 1), lengthDays) }
 
     var habitsOrdered: [Habit] { habits.sorted { $0.order < $1.order } }
 }

@@ -26,21 +26,15 @@ enum Theme {
     static let sageBadge = sage
 
     // MARK: Semantic
-    static let textPrimary   = ink
     static let textSecondary = ink.opacity(0.5)
-    static let textOnRose    = Color.white
 
     // MARK: Gradients (kept subtle — the reference is mostly flat color)
     static let roseGradient = LinearGradient(colors: [coral, roseDeep], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let plumGradient = LinearGradient(colors: [Color(hex: "2A2A2E"), ink], startPoint: .top, endPoint: .bottom)
-    static let backdrop     = LinearGradient(colors: [paper, paper], startPoint: .top, endPoint: .bottom)
 
     // MARK: Metrics
     static let pillRadius: CGFloat = 30
     static let cardRadius: CGFloat = 26
-    static let panelRadius: CGFloat = 34
-
-    static func softShadow(_ color: Color = .black) -> Color { color.opacity(0.08) }
 }
 
 // MARK: - App background

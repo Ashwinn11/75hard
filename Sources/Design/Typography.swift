@@ -17,11 +17,6 @@ enum Font2 {
         Font.custom(hankenName(weight), fixedSize: size)
     }
 
-    /// Hanken at a size that still scales with Dynamic Type, relative to a text style.
-    static func sans(_ size: CGFloat, _ weight: Font.Weight = .bold, relativeTo style: Font.TextStyle) -> Font {
-        Font.custom(hankenName(weight), size: size, relativeTo: style)
-    }
-
     private static func hankenName(_ weight: Font.Weight) -> String {
         switch weight {
         case .ultraLight, .thin, .light, .regular: return "HankenGrotesk-Regular"
@@ -72,13 +67,3 @@ struct SerifHeadline: View {
     }
 }
 
-// MARK: - Convenience text modifiers
-
-extension Text {
-    func serifDisplay(_ size: CGFloat = 40, weight: Font.Weight = .semibold, color: Color = Theme.ink) -> some View {
-        self.font(Font2.serif(size, weight)).foregroundStyle(color)
-    }
-    func sansTitle(_ size: CGFloat = 18, weight: Font.Weight = .bold, color: Color = Theme.ink) -> some View {
-        self.font(Font2.sans(size, weight)).foregroundStyle(color)
-    }
-}
