@@ -245,22 +245,42 @@ struct SignaturePad: View {
 
 /// The real app screenshot (`Resources/Images/onb_preview.png`) shown in a phone frame.
 /// The frame's aspect matches the screenshot (1170×2532) so nothing is cropped.
+/// Full-device iPhone mockup around a real app screenshot — ported from yumeship's MockPhone
+/// (Figma base 1280×2642, screen inset 55, radii 210/165). Titanium band is brand-tinted clay.
+/// `onb_preview` already carries its own status bar, so no Dynamic Island is drawn over it.
 struct AppScreenshot: View {
     var height: CGFloat = 430
-    private let aspect: CGFloat = 1170.0 / 2532.0
+    private let baseW: CGFloat = 1280, baseH: CGFloat = 2642
+
+    private var width: CGFloat { height * baseW / baseH }
+    private func r(_ n: CGFloat) -> CGFloat { n * width / baseW }
 
     var body: some View {
-        Group {
-            if AppImage.exists("onb_preview") {
-                PhotoFill(name: "onb_preview")
-            } else {
-                Theme.chipFill
+        ZStack {
+            // Body
+            RoundedRectangle(cornerRadius: r(210), style: .continuous).fill(Color(hex: "1C1713"))
+            // Outer hairline
+            RoundedRectangle(cornerRadius: r(210), style: .continuous)
+                .strokeBorder(Color(hex: "7A4433"), lineWidth: max(1, r(5)))
+            // Titanium band (brand clay)
+            RoundedRectangle(cornerRadius: r(205), style: .continuous)
+                .strokeBorder(Theme.clay, lineWidth: max(1, r(13))).padding(r(5))
+            // Inner sheen
+            RoundedRectangle(cornerRadius: r(200), style: .continuous)
+                .strokeBorder(Color(hex: "DCA48E"), lineWidth: max(1, r(5))).padding(r(10)).opacity(0.9)
+            // Bezel reflection
+            RoundedRectangle(cornerRadius: r(187), style: .continuous)
+                .strokeBorder(Color(hex: "6E655E"), lineWidth: max(1, r(2))).padding(r(23)).opacity(0.8)
+            // Screen
+            Group {
+                if AppImage.exists("onb_preview") { PhotoFill(name: "onb_preview") }
+                else { Theme.chipFill }
             }
+            .frame(width: width - 2 * r(55), height: height - 2 * r(55))
+            .clipShape(RoundedRectangle(cornerRadius: r(165), style: .continuous))
         }
-        .frame(width: height * aspect, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Theme.ink.opacity(0.85), lineWidth: 6))
-        .shadow(color: .black.opacity(0.15), radius: 18, y: 10)
+        .frame(width: width, height: height)
+        .shadow(color: .black.opacity(0.22), radius: 24, y: 14)
         .rotationEffect(.degrees(-4))   // slight casual tilt
     }
 }

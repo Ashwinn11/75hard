@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import RevenueCat
 
-private let revenueCatKey = "appl_QPTGxBXwEKhEldrWDvtUqgbyzAq"
+private let revenueCatKey = "test_MrDsNIMzOwosSuKOszOxLkMoVmx"
 
 // MARK: - Premium (RevenueCat)
 //

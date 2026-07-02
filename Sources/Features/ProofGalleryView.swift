@@ -238,6 +238,7 @@ struct ProofViewer: View {
     @State private var dismissDrag: CGFloat = 0
     @State private var pageDrag: CGFloat = 0
     @State private var dragAxis: Axis? = nil
+    @State private var didShare = false     // shared a proof → ask for a rating on the way out
 
     var body: some View {
         ZStack {
@@ -267,6 +268,8 @@ struct ProofViewer: View {
             chrome.opacity(1 - min(dismissDrag, 160) / 160)
         }
         .statusBarHidden()
+        // Fire on the way out so the review sheet doesn't collide with the share sheet.
+        .onDisappear { if didShare { Ratings.note(.sharedProgress) } }
     }
 
     private func drag(width w: CGFloat) -> some Gesture {
@@ -311,7 +314,7 @@ struct ProofViewer: View {
                 HStack {
                     Spacer()
                     ShareLink(item: shot.url) { icon("square.and.arrow.up") }
-                        .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+                        .simultaneousGesture(TapGesture().onEnded { Haptics.tap(); didShare = true })
                     Button { Haptics.tap(); dismiss() } label: { icon("xmark") }
                 }
                 .padding(.horizontal, 16).padding(.top, 8)

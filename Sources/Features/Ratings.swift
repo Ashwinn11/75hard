@@ -5,7 +5,8 @@ import UIKit
 //
 // Views NOTE good moments; this decides whether to actually ask, so prompts ride real highs
 // and the user is never nagged:
-//   • value first — no ask before day 3 of a challenge (friend moments need one finished day)
+//   • value first — ask on the FIRST fully-completed day (a real high; drives early rating
+//     velocity, which ASO authority needs). Friend moments still need one finished day.
 //   • at most one ask every 30 days, three per rolling year (Apple also hard-caps at 3/365)
 //   • finishing the whole challenge skips the 30-day wait, never the yearly cap
 // requestReview is a request, not a command — Apple may still suppress the sheet.
@@ -15,14 +16,15 @@ enum Ratings {
         case dayComplete(day: Int)   // every mission checked off — fired as the celebration closes
         case friendJoined            // a friend request was accepted
         case challengeFinished       // crossed the finish line
+        case sharedProgress          // shared a proof photo from the journey — an act of pride
     }
 
     static func note(_ moment: Moment) {
         switch moment {
         case .dayComplete(let day):
             bestDay = max(bestDay, day)
-            guard day >= 3, cooledDown else { return }
-        case .friendJoined:
+            guard day >= 1, cooledDown else { return }
+        case .friendJoined, .sharedProgress:
             guard bestDay >= 1, cooledDown else { return }
         case .challengeFinished:
             guard yearCount < 3 else { return }
