@@ -102,7 +102,7 @@ struct OnboardingFlow: View {
         case 14: LoadingStep(onNext: next)
         case 15: ReadyStep(model: model, onNext: next)
         case 16: SignPromiseStep(onNext: next)
-        default: PaywallStep(model: model, onStart: finish)
+        default: PaywallView(days: model.lengthDays, onUnlocked: finish)
         }
     }
 
@@ -132,7 +132,8 @@ struct OnboardingFlow: View {
 }
 
 // CTA buttons are ~75% of the screen width (per the reference), centered.
-private func ctaPad<V: View>(_ v: V) -> some View {
+// Internal: PaywallView (Sources/Premium) shares this bottom-CTA layout.
+func ctaPad<V: View>(_ v: V) -> some View {
     HStack(spacing: 0) {
         Spacer(minLength: 0)
         v.containerRelativeFrame(.horizontal) { w, _ in w * 0.75 }
@@ -170,7 +171,6 @@ private struct WelcomeStep: View {
             OnbBottomCard {
                 TypewriterHeadline(lead: "Become", accent: "that Girl", size: 40, accentColor: Theme.rose, alignment: .center)
                 PrimaryButton(title: "Let's do this", action: onNext)
-                Text("Already have an account?").font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.55)).underline()
             }
         }
     }
@@ -783,56 +783,5 @@ private struct SignPromiseStep: View {
     }
 }
 
-// MARK: - 17 Paywall (UI stub)
-
-private struct PaywallStep: View {
-    @Bindable var model: OnboardingModel
-    var onStart: () -> Void
-    @State private var plan = 0
-    private let plans = [("Yearly", "$49.99/year", "Save 88%"), ("Monthly", "$14.99/month", ""), ("Weekly", "$7.99/week", "")]
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 10) {
-                    VStack(spacing: 2) {
-                        Text("Become Her in \(model.lengthDays) days").font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
-                        Text("Join 30,000+ women").font(Font2.serif(26, .semibold)).foregroundStyle(Theme.ink)
-                    }.multilineTextAlignment(.center).padding(.top, 10)
-                    VStack(spacing: 6) {
-                        ForEach(["Achieve aesthetic", "Join community", "Stay accountable"], id: \.self) { b in
-                            Label(b, systemImage: "checkmark.circle.fill").font(Font2.sans(14, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
-                        }
-                    }.padding(.top, 12)
-                    VStack(spacing: 10) {
-                        ForEach(Array(plans.enumerated()), id: \.offset) { i, p in
-                            Button { plan = i; Haptics.select() } label: { planRow(i, p) }.buttonStyle(.plain)
-                        }
-                    }.padding(.top, 16)
-                }.padding(.horizontal, 22)
-            }
-            ctaPad(VStack(spacing: 10) {
-                PrimaryButton(title: "Become Her", color: Theme.orchid, action: onStart)
-                HStack(spacing: 18) { Text("Terms"); Text("Restore"); Text("Privacy") }
-                    .font(Font2.sans(11, .medium)).foregroundStyle(Theme.ink.opacity(0.4))
-            }).padding(.top, 8)
-        }
-    }
-    private func planRow(_ i: Int, _ p: (String, String, String)) -> some View {
-        let on = plan == i
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle().stroke(on ? Theme.rose : Theme.ring, lineWidth: 2).frame(width: 24, height: 24)
-                if on { Circle().fill(Theme.rose).frame(width: 14, height: 14) }
-            }
-            Text(p.0).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
-            if !p.2.isEmpty {
-                Text(p.2).font(Font2.sans(10, .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.sageBadge, in: Capsule())
-            }
-            Spacer()
-            Text(p.1).font(Font2.sans(15, .heavy)).foregroundStyle(Theme.ink)
-        }
-        .padding(16).background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(on ? Theme.ink : Theme.ring, lineWidth: on ? 2 : 1))
-    }
-}
+// The paywall (final step) lives in Sources/Premium/PaywallView.swift — it's shared with
+// RootGate, which re-shows it if the subscription ever lapses.

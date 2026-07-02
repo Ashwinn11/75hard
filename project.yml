@@ -20,6 +20,11 @@ settings:
     DEVELOPMENT_TEAM: PVQK77DQWL
     DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
 
+packages:
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios
+    from: "5.0.0"
+
 # Shared font list reused by app + widget Info.plists
 fontList: &fontList
   - CormorantGaramond.ttf
@@ -45,6 +50,7 @@ targets:
       - path: Sources/Store
       - path: Sources/Features
       - path: Sources/Onboarding
+      - path: Sources/Premium        # RevenueCat lives app-side only (widget must not link it)
       - path: Assets.xcassets
       - path: Resources/Images
         type: folder
@@ -68,6 +74,7 @@ targets:
         UILaunchScreen: {}
         UIUserInterfaceStyle: Light
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
         UIApplicationSupportsIndirectInputEvents: true
         NSCameraUsageDescription: "75 Her uses your camera to capture a quick proof photo when you complete a daily mission. Photos stay private on your device."
         NSPhotoLibraryUsageDescription: "75 Her accesses your photo library so you can pick a proof or progress photo. Photos stay private on your device."
@@ -81,6 +88,8 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
       - target: Her75Widget
+      - package: RevenueCat
+        product: RevenueCat
 
   # ─── Widget Extension ────────────────────────────────────────────────────────
   Her75Widget:

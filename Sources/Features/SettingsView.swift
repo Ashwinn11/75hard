@@ -10,6 +10,8 @@ struct SettingsView: View {
     @Query(sort: \Challenge.createdAt, order: .reverse) private var challenges: [Challenge]
     @State private var social = SocialStore.shared
     @State private var confirmWipe = false
+    @State private var restoring = false
+    @State private var restoreMessage: String?
     private var challenge: Challenge? { challenges.first }
 
     var body: some View {
@@ -45,6 +47,14 @@ struct SettingsView: View {
                     section("Subscription") {
                         Button {
                             Haptics.tap()
+                            restorePurchases()
+                        } label: {
+                            SettingsRow(title: restoring ? "Restoring…" : "Restore purchases", chevron: "arrow.clockwise")
+                        }
+                        .disabled(restoring)
+                        rowDivider
+                        Button {
+                            Haptics.tap()
                             if let url = URL(string: "https://apps.apple.com/account/subscriptions") { openURL(url) }
                         } label: {
                             SettingsRow(title: "Manage subscription", chevron: "arrow.up.right")
@@ -69,6 +79,26 @@ struct SettingsView: View {
             } message: {
                 Text("This erases your challenge, progress, photo, and profile — and removes you from CloudKit so no one can find you. You'll unfriend everyone and start completely fresh. This can't be undone.")
             }
+            .alert("Restore purchases", isPresented: Binding(
+                get: { restoreMessage != nil }, set: { if !$0 { restoreMessage = nil } })) {
+                Button("OK") { restoreMessage = nil }
+            } message: {
+                Text(restoreMessage ?? "")
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        restoring = true
+        Task {
+            do {
+                restoreMessage = try await Premium.shared.restore()
+                    ? "Your subscription is active — you're all set."
+                    : "No active subscription found on this Apple ID."
+            } catch {
+                restoreMessage = "Couldn't reach the App Store. Try again in a moment."
+            }
+            restoring = false
         }
     }
 
