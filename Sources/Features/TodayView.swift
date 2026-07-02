@@ -4,6 +4,7 @@ import PhotosUI
 
 struct TodayView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Challenge.createdAt, order: .reverse) private var challenges: [Challenge]
     @Environment(CelebrationCenter.self) private var celebration
     @State private var editing = false
@@ -45,6 +46,13 @@ struct TodayView: View {
         .task {
             await SocialStore.shared.bootstrap()
             if let c = challenge { await SocialStore.shared.publishStatus(for: c) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Missions toggled from the widget land while we're suspended — republish on return
+            // so friends see that progress without waiting for an in-app action. (publishStatus
+            // is throttled: nothing changed → no CloudKit write.)
+            guard phase == .active, let c = challenge else { return }
+            Task { await SocialStore.shared.publishStatus(for: c) }
         }
     }
 
