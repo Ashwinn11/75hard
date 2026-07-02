@@ -21,10 +21,23 @@ struct PrimaryButton: View {
             .foregroundStyle(textColor)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 17)
-            .background(color, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
-            .shadow(color: color.opacity(0.30), radius: 10, x: 0, y: 5)
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PillPressStyle(color: color))
+    }
+}
+
+/// The pill background + shadow live in the style so a press physically "sits the
+/// button down" — scale dips while the shadow compresses under it — and releases
+/// with a bounce.
+struct PillPressStyle: ButtonStyle {
+    var color: Color
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(color, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
+            .shadow(color: color.opacity(configuration.isPressed ? 0.16 : 0.30),
+                    radius: configuration.isPressed ? 4 : 10, x: 0, y: configuration.isPressed ? 2 : 5)
+            .scaleEffect(configuration.isPressed ? 0.965 : 1)
+            .animation(Motion.bouncy, value: configuration.isPressed)
     }
 }
 
@@ -52,6 +65,7 @@ struct CircleIconButton: View {
                 .frame(width: 44, height: 44).background(.white, in: Circle())
                 .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
         }
+        .buttonStyle(PressableStyle())
     }
 }
 
@@ -62,15 +76,31 @@ struct SelectPill: View {
     let selected: Bool
     var hPad: CGFloat = 18
     var vPad: CGFloat = 11
+    /// When set, the ink capsule is shared across the group's pills via
+    /// matchedGeometryEffect, so selection *slides* between them instead of swapping fills.
+    var slide: (id: String, ns: Namespace.ID)? = nil
     var action: () -> Void
     var body: some View {
         Button { Haptics.select(); action() } label: {
             Text(text).font(Font2.sans(15, .bold)).foregroundStyle(selected ? .white : Theme.ink)
                 .padding(.horizontal, hPad).padding(.vertical, vPad)
-                .background(selected ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color.white), in: Capsule())
+                .background {
+                    ZStack {
+                        Capsule().fill(Color.white)
+                        if selected {
+                            if let slide {
+                                Capsule().fill(Theme.ink)
+                                    .matchedGeometryEffect(id: slide.id, in: slide.ns)
+                            } else {
+                                Capsule().fill(Theme.ink)
+                            }
+                        }
+                    }
+                }
                 .overlay(Capsule().stroke(Theme.ring, lineWidth: selected ? 0 : 1.5))
+                .animation(Motion.snappy, value: selected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
     }
 }
 
@@ -79,6 +109,7 @@ struct SelectPill: View {
 struct ProfileAvatar: View {
     var size: CGFloat = 66
     @AppStorage("profilePhotoV") private var photoVersion = 0
+    @State private var sweep: Double = 0        // one-shot rose sweep around the ring on photo change
 
     var body: some View {
         ZStack {
@@ -90,10 +121,24 @@ struct ProfileAvatar: View {
                     .font(.system(size: size * 0.4, weight: .semibold)).foregroundStyle(.white)
             }
         }
+        .id(photoVersion)
         .frame(width: size, height: size).clipShape(Circle())
         .overlay(Circle().stroke(.white, lineWidth: max(2, size / 44)))
+        .overlay {
+            if sweep > 0 {
+                Circle()
+                    .stroke(AngularGradient(colors: [.clear, Theme.coral, Theme.roseDeep, .clear],
+                                            center: .center),
+                            lineWidth: max(2, size / 44))
+                    .rotationEffect(.degrees(sweep))
+                    .opacity(sweep < 360 ? 1 : 0)
+            }
+        }
         .shadow(color: .black.opacity(0.10), radius: size / 9, y: size / 18)
-        .id(photoVersion)
+        .onChange(of: photoVersion) {
+            sweep = 1
+            withAnimation(.easeInOut(duration: 0.8)) { sweep = 360 }
+        }
     }
 }
 
@@ -139,8 +184,8 @@ extension View {
 struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(Motion.bouncy, value: configuration.isPressed)
     }
 }
 
@@ -157,6 +202,9 @@ struct RulerSlider: View {
     var showLabels: Bool = true
 
     @State private var anchor: Int? = nil   // value captured at drag start
+    @State private var overshoot: CGFloat = 0   // rubber-band px past the range ends
+    @State private var dragging = false
+    @State private var flingTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(spacing: 10) {
@@ -192,24 +240,57 @@ struct RulerSlider: View {
                         }
                     }
                 }
+                .offset(x: overshoot)
                 .overlay(alignment: .top) {
-                    RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 3, height: 30).offset(y: 26)
+                    RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 3, height: 30)
+                        .scaleEffect(dragging ? 1.2 : 1)
+                        .shadow(color: accent.opacity(dragging ? 0.7 : 0), radius: dragging ? 5 : 0)
+                        .animation(Motion.snappy, value: dragging)
+                        .offset(y: 26)
                 }
                 .mask(LinearGradient(colors: [.clear, .black, .black, .black, .clear], startPoint: .leading, endPoint: .trailing))
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { g in
+                            flingTask?.cancel()
+                            if anchor == nil { anchor = value; dragging = true }
                             let base = anchor ?? value
-                            if anchor == nil { anchor = value }
                             let delta = Int((g.translation.width / tickSpacing).rounded())
-                            let nv = min(max(base - delta, range.lowerBound), range.upperBound)
+                            let raw = base - delta
+                            let nv = min(max(raw, range.lowerBound), range.upperBound)
+                            // Rubber-band: past the ends the ticks keep following the
+                            // finger at 0.3× resistance instead of pinning dead.
+                            overshoot = max(-44, min(44, CGFloat(nv - raw) * tickSpacing * 0.3))
                             if nv != value { value = nv; Haptics.select() }
                         }
-                        .onEnded { _ in anchor = nil }
+                        .onEnded { g in
+                            anchor = nil; dragging = false
+                            withAnimation(Motion.bouncy) { overshoot = 0 }
+                            fling(velocity: g.predictedEndTranslation.width - g.translation.width)
+                        }
                 )
             }
             .frame(height: showLabels ? 78 : 44)
+        }
+    }
+
+    /// Momentum: a flick keeps ticking with exponential decay, one haptic per tick.
+    private func fling(velocity: CGFloat) {
+        let ticks = Int((abs(velocity) / (tickSpacing * 6)).rounded())
+        guard ticks > 0 else { return }
+        let step = velocity > 0 ? -1 : 1        // dragging right lowers the value
+        flingTask = Task { @MainActor in
+            var interval = 0.028
+            for _ in 0..<min(ticks, 30) {
+                try? await Task.sleep(for: .seconds(interval))
+                if Task.isCancelled { return }
+                interval *= 1.16
+                let nv = min(max(value + step, range.lowerBound), range.upperBound)
+                guard nv != value else { return }
+                value = nv
+                Haptics.select()
+            }
         }
     }
 }
@@ -283,7 +364,7 @@ struct TaskListEditor: View {
             }
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                    row(i, item)
+                    row(i, item).staggeredAppear(index: i)
                     if i < items.count - 1 { Divider().padding(.leading, 62) }
                 }
             }
@@ -332,11 +413,14 @@ struct EditTaskSheet: View {
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .background(draft.color.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .animation(Motion.gentle, value: draft.color)
 
             HStack(spacing: 12) {
                 ForEach(HabitColor.palette) { c in
                     Circle().fill(c.gradient).frame(width: 30, height: 30)
                         .overlay(Circle().stroke(Theme.ink, lineWidth: draft.color == c ? 2.5 : 0))
+                        .scaleEffect(draft.color == c ? 1.18 : 1)
+                        .animation(Motion.pop, value: draft.color)
                         .onTapGesture { Haptics.select(); draft.color = c }
                 }
             }
@@ -359,7 +443,9 @@ struct EditTaskSheet: View {
         }
         .padding(24)
         .presentationDetents([.height(380)])
-        .her75Background()
+        .presentationCornerRadius(34)
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.thinMaterial)
     }
 }
 
@@ -370,6 +456,7 @@ struct LengthPicker: View {
     @Binding var days: Int
     let startDate: Date
     var showsCustomBadge = false        // onboarding shows a "Custom" state pill under the presets
+    @Namespace private var pillNS      // the ink capsule slides between preset pills
 
     static let presets = [7, 14, 30, 75]
 
@@ -379,7 +466,9 @@ struct LengthPicker: View {
                 .padding(.horizontal, 16)
             HStack(spacing: 10) {
                 ForEach(Self.presets, id: \.self) { p in
-                    SelectPill(text: "\(p)", selected: days == p) { withAnimation { days = p } }
+                    SelectPill(text: "\(p)", selected: days == p, slide: ("preset", pillNS)) {
+                        withAnimation(Motion.snappy) { days = p }
+                    }
                 }
             }.padding(.top, 20)
             if showsCustomBadge {
@@ -388,6 +477,7 @@ struct LengthPicker: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 13)
                     .background(Self.presets.contains(days) ? AnyShapeStyle(Color.white) : AnyShapeStyle(Theme.ink), in: Capsule())
                     .overlay(Capsule().stroke(Theme.ring, lineWidth: Self.presets.contains(days) ? 1.5 : 0))
+                    .animation(Motion.snappy, value: days)
                     .padding(.horizontal, 30).padding(.top, 10)
             }
             Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
@@ -412,6 +502,7 @@ struct InviteTicket: View {
     var shareText: String? = nil         // when set, a share icon appears inline next to the code
     var ticketFill: Color = Color(hex: "F3EEE3")
     var notchColor: Color = Theme.paper  // should match the background behind the card
+    @State private var shareBounce = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -433,17 +524,19 @@ struct InviteTicket: View {
                     Text(code.map(SocialStore.format) ?? "•••• ••••")
                         .font(Font2.sans(34, .heavy)).tracking(4)
                         .foregroundStyle(code == nil ? Theme.ink.opacity(0.3) : Theme.ink)
-                        .contentTransition(.opacity)
+                        .contentTransition(.numericText())
+                        .animation(Motion.gentle, value: code)
 
                     if let shareText, code != nil {
                         ShareLink(item: shareText) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 13, weight: .bold))
+                                .symbolEffect(.bounce, value: shareBounce)
                                 .foregroundStyle(Theme.ink.opacity(0.55))
                                 .frame(width: 32, height: 32)
                                 .background(Theme.ink.opacity(0.08), in: Circle())
                         }
-                        .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+                        .simultaneousGesture(TapGesture().onEnded { Haptics.tap(); shareBounce += 1 })
                         .accessibilityLabel("Share your invite code")
                     }
                 }

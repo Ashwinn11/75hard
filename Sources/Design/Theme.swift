@@ -39,10 +39,42 @@ enum Theme {
 
 // MARK: - App background
 
+/// Paper that breathes: a near-imperceptible 3×3 mesh drifting between paper and a
+/// whisper of the screen's accent, finished with a static grain so the fill reads as
+/// actual paper instead of a flat hex. Meant to be felt, not seen.
 struct AppBackground: View {
-    var body: some View { Theme.paper.ignoresSafeArea() }
+    var accent: Color? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 10, paused: reduceMotion)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate / 10
+            let drift = Float(sin(t)) * 0.16
+            MeshGradient(
+                width: 3, height: 3,
+                points: [
+                    [0, 0], [0.5, 0], [1, 0],
+                    [0, 0.5], [0.5 + drift * 0.5, 0.5 - drift * 0.4], [1, 0.5],
+                    [0, 1], [0.5, 1], [1, 1],
+                ],
+                colors: meshColors(warmth: 0.05 + Double(drift) * 0.06))
+        }
+        .colorEffect(ShaderLibrary.grain(.float(0.045)))
+        .ignoresSafeArea()
+    }
+
+    private func meshColors(warmth: Double) -> [Color] {
+        let tint = accent ?? Theme.taupe
+        let breath = Theme.paper.mix(with: tint, by: warmth)
+        let corner = Theme.paper.mix(with: tint, by: 0.035)
+        return [
+            corner, Theme.paper, Theme.paper,
+            Theme.paper, breath, Theme.paper,
+            Theme.paper, Theme.paper, corner,
+        ]
+    }
 }
 
 extension View {
-    func her75Background() -> some View { background(AppBackground()) }
+    func her75Background(_ accent: Color? = nil) -> some View { background(AppBackground(accent: accent)) }
 }

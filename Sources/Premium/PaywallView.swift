@@ -55,6 +55,7 @@ struct PaywallView: View {
 
             ctaPad(VStack(spacing: 10) {
                 PrimaryButton(title: busy ? "One sec…" : "Become Her", color: Theme.orchid) { buy() }
+                    .shimmerOnce(delay: 0.8)
                     .disabled(busy || selected == nil)
                     .opacity(selected == nil ? 0.5 : 1)
                 Text("Auto-renews until canceled. Cancel anytime in the App Store.")
@@ -79,8 +80,12 @@ struct PaywallView: View {
         } message: {
             Text(restoreMessage ?? "")
         }
-        .sheet(item: $legal) { k in NavigationStack { LegalView(kind: k) } }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: premium.plans)
+        .sheet(item: $legal) { k in
+            NavigationStack { LegalView(kind: k) }
+                .presentationCornerRadius(34)
+                .presentationDragIndicator(.visible)
+        }
+        .animation(Motion.snappy, value: premium.plans)
     }
 
     @ViewBuilder private var plansSection: some View {
@@ -108,9 +113,10 @@ struct PaywallView: View {
             VStack(spacing: 10) {
                 ForEach(premium.plans) { p in
                     Button { selectedID = p.id; Haptics.select() } label: { planRow(p) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressableStyle())
                 }
             }
+            .animation(Motion.snappy, value: selectedID)
         }
     }
 

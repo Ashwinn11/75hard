@@ -153,7 +153,7 @@ struct AnimatedChips: View {
             .onAppear {
                 for i in 0..<items.count {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35 * Double(i + 1)) {
-                        withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) { shownCount = i + 1 }
+                        withAnimation(Motion.bouncy) { shownCount = i + 1 }
                         Haptics.tap()
                     }
                 }

@@ -30,6 +30,7 @@ struct OnboardingFlow: View {
     @Environment(\.modelContext) private var context
     @State private var model = OnboardingModel()
     @State private var step = 0
+    @State private var forward = true       // so Back slides the right way
     private let last = 17
     private let loadingStep = 14
 
@@ -41,8 +42,9 @@ struct OnboardingFlow: View {
                 stepView
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .id(step)
-                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                            removal: .move(edge: .leading).combined(with: .opacity)))
+                    .transition(.asymmetric(
+                        insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)))
             }
         }
     }
@@ -59,6 +61,7 @@ struct OnboardingFlow: View {
             if (5...11).contains(step) {        // quiz → length: setup progress
                 ProgressBarThin(value: Double(step - 4) / 7.0, track: Theme.ring, fill: Theme.ink, height: 6)
                     .frame(maxWidth: 170)
+                    .animation(Motion.gentle, value: step)
             }
             Spacer()
         }
@@ -98,9 +101,9 @@ struct OnboardingFlow: View {
     private func bind(_ key: ReferenceWritableKeyPath<OnboardingModel, String?>) -> Binding<String?> {
         Binding(get: { model[keyPath: key] }, set: { model[keyPath: key] = $0 })
     }
-    private func next() { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = min(step + 1, last) } }
-    private func back() { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = max(step - 1, 0) } }
-    private func skip(to s: Int) { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = min(max(s, 0), last) } }
+    private func next() { forward = true; withAnimation(Motion.gentle) { step = min(step + 1, last) } }
+    private func back() { forward = false; withAnimation(Motion.gentle) { step = max(step - 1, 0) } }
+    private func skip(to s: Int) { forward = s >= step; withAnimation(Motion.gentle) { step = min(max(s, 0), last) } }
 
     private func finish() {
         if model.habitDrafts.isEmpty { model.pick(model.track) }
@@ -155,6 +158,7 @@ private struct WelcomeStep: View {
                 Text("+24,872 joined").font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(.white, in: Capsule()).shadow(color: .black.opacity(0.1), radius: 8, y: 4).padding(.top, 6)
+                    .popIn(delay: 0.5)
             }
             Spacer()
             OnbBottomCard {
@@ -173,7 +177,7 @@ private struct AppPreviewStep: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            MiniPhonePreview()
+            MiniPhonePreview().popIn(delay: 0.15, from: 0.88)
             Spacer()
             OnbBottomCard {
                 TypewriterHeadline(lead: "Welcome to your next", accent: "75 days", size: 28, accentColor: Theme.coral, alignment: .center)
@@ -196,7 +200,9 @@ private struct FriendsPreviewStep: View {
         VStack(spacing: 0) {
             Spacer()
             VStack(spacing: 12) {
-                ForEach(Array(peeks.enumerated()), id: \.offset) { _, f in card(f) }
+                ForEach(Array(peeks.enumerated()), id: \.offset) { i, f in
+                    card(f).staggeredAppear(index: i)
+                }
             }
             .padding(.horizontal, 22)
             Spacer()
@@ -274,7 +280,10 @@ private struct NameStep: View {
             TextField("First name", text: $model.name)
                 .font(Font2.serif(28, .medium)).multilineTextAlignment(.center)
                 .focused($focused).textInputAutocapitalization(.words).padding(.top, 28)
-            Rectangle().fill(Theme.ring).frame(width: 220, height: 1.5).padding(.top, 6)
+            // The signature line draws itself out as the keyboard arrives.
+            Rectangle().fill(focused ? Theme.orchid.opacity(0.6) : Theme.ring)
+                .frame(width: focused ? 220 : 70, height: 1.5).padding(.top, 6)
+                .animation(Motion.gentle, value: focused)
             Spacer()
             if AppImage.exists("onb_name") {
                 PhotoFill(name: "onb_name").frame(height: 220).frame(maxWidth: .infinity).clipped()
@@ -299,8 +308,9 @@ private struct QuizStep: View {
             TypewriterHeadline(lead: lead, accent: accent, trail: trail, size: 32, accentColor: Theme.ink, accentItalic: false)
                 .padding(.horizontal, 24).padding(.top, 6)
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(options, id: \.self) { opt in
+                ForEach(Array(options.enumerated()), id: \.element) { i, opt in
                     OptionPill(text: opt, selected: selection == opt) { selection = opt }
+                        .staggeredAppear(index: i)
                 }
             }.padding(.horizontal, 24).padding(.top, 22)
             Spacer()
@@ -310,7 +320,7 @@ private struct QuizStep: View {
             ctaPad(PrimaryButton(title: "Continue", color: color, action: onNext)
                 .disabled(selection == nil).opacity(selection == nil ? 0.5 : 1)).padding(.top, 12)
         }
-        .animation(.easeInOut, value: selection)
+        .animation(Motion.gentle, value: selection)
     }
 }
 
@@ -338,9 +348,10 @@ private struct ChooseChallengeStep: View {
             }.padding(.top, 14)
             ScrollView {
                 VStack(spacing: 24) {
-                    ForEach(ChallengeTrack.catalog) { t in
+                    ForEach(Array(ChallengeTrack.catalog.enumerated()), id: \.element.id) { i, t in
                         Button { Haptics.select(); model.pick(t); onNext() } label: { ChallengeStripCard(track: t) }
                             .buttonStyle(PressableStyle())
+                            .staggeredAppear(index: i)
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 24)
@@ -418,15 +429,17 @@ struct StartDateStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
     @State private var mode = 0
+    @Namespace private var pillNS
     var body: some View {
         VStack(spacing: 0) {
             TypewriterHeadline(lead: "When do we", accent: "begin?", size: 32, accentColor: Theme.rose, alignment: .center).padding(.top, 6)
             Spacer()
             Text(bigWord).font(Font2.sans(64, .heavy)).foregroundStyle(Theme.ink).contentTransition(.numericText())
+                .animation(Motion.snappy, value: mode)
             HStack(spacing: 10) {
                 ForEach(Array(["Today", "Tomorrow", "Custom"].enumerated()), id: \.offset) { i, t in
-                    SelectPill(text: t, selected: mode == i, hPad: 20, vPad: 12) {
-                        withAnimation { mode = i }; apply(i)
+                    SelectPill(text: t, selected: mode == i, hPad: 20, vPad: 12, slide: ("start", pillNS)) {
+                        withAnimation(Motion.snappy) { mode = i }; apply(i)
                     }
                 }
             }.padding(.top, 22)
@@ -504,6 +517,7 @@ private struct PartnerUpStep: View {
                 .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(.white, in: Capsule()).shadow(color: .black.opacity(0.06), radius: 6, y: 3).padding(.top, 14)
+                .popIn(delay: 0.4)
             Spacer()
             ctaPad(VStack(spacing: 10) {
                 PrimaryButton(title: "Partner Up", icon: "person.badge.plus", color: Theme.coral, action: onPartner)
@@ -540,8 +554,10 @@ private struct InviteTicketStep: View {
                 .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(.white, in: Capsule()).shadow(color: .black.opacity(0.06), radius: 6, y: 3).padding(.top, 16)
+                .popIn(delay: 0.4)
             Spacer()
             InviteTicket(name: model.name, code: social.myCode).padding(.horizontal, 22)
+                .popIn(delay: 0.2, from: 0.92)
             Spacer()
             HStack(spacing: 12) {
                 PrimaryButton(title: "Continue", color: Theme.periwinkle, action: onNext)
@@ -571,20 +587,41 @@ private struct LoadingStep: View {
     var onNext: () -> Void
     @State private var idx = 0
     @State private var rotate = false
+    @State private var done = false
     private let lines = ["Saving your daily mission…", "Pinning your start date…", "Almost ready…"]
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Circle().trim(from: 0, to: 0.28)
-                .stroke(Theme.ink, style: StrokeStyle(lineWidth: 3, lineCap: .round)).frame(width: 78, height: 78)
-                .rotationEffect(.degrees(rotate ? 360 : 0))
+            ZStack {
+                Circle().stroke(Theme.ring, lineWidth: 3)
+                Circle().trim(from: 0, to: done ? 1 : 0.28)
+                    .stroke(AngularGradient(colors: [Theme.coral, Theme.orchid, Theme.periwinkle, Theme.coral],
+                                            center: .center),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(rotate ? 360 : 0))
+                Image(systemName: "checkmark")
+                    .font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
+                    .scaleEffect(done ? 1 : 0.3).opacity(done ? 1 : 0)
+            }
+            .frame(width: 78, height: 78)
             Text(lines[min(idx, lines.count - 1)]).font(Font2.serif(20, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.7))
+                .contentTransition(.opacity)
             Spacer()
         }
         .onAppear {
             withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { rotate = true }
-            for i in 1..<lines.count { DispatchQueue.main.asyncAfter(deadline: .now() + 0.85 * Double(i)) { withAnimation { idx = i } } }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.7) { onNext() }
+            for i in 1..<lines.count {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.85 * Double(i)) {
+                    withAnimation(Motion.gentle) { idx = i }
+                    Haptics.light()
+                }
+            }
+            // The ring completes, the check pops — a beat of "it's done" before moving on.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                withAnimation(Motion.pop) { done = true }
+                Haptics.success()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { onNext() }
         }
     }
 }
@@ -594,6 +631,7 @@ private struct LoadingStep: View {
 private struct ReadyStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
+    @State private var placed = false       // the plan card lands like a sticker being pressed on
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 2) {
@@ -603,8 +641,15 @@ private struct ReadyStep: View {
             .multilineTextAlignment(.center).padding(.top, 10).padding(.horizontal, 28)
             Spacer()
             planCard
+                .scaleEffect(placed ? 1 : 1.16)
+                .rotationEffect(.degrees(placed ? 0 : 3.5))
+                .opacity(placed ? 1 : 0)
             Spacer()
             ctaPad(PrimaryButton(title: "Start now", color: Theme.periwinkle, action: onNext))
+        }
+        .onAppear {
+            withAnimation(Motion.bouncy.delay(0.3)) { placed = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Haptics.rigid() }   // the "slap"
         }
     }
 
@@ -654,6 +699,7 @@ private struct SignPromiseStep: View {
                     Text("89% of girlies who signed, finished").font(Font2.sans(12, .bold))
                 }.foregroundStyle(Theme.ink.opacity(0.7))
                     .padding(.horizontal, 12).padding(.vertical, 7).background(Theme.chipFill, in: Capsule())
+                    .popIn(delay: 0.3)
                 VStack(spacing: 2) {
                     TypewriterHeadline(lead: "Sign your", accent: "promise", size: 30, accentColor: Theme.rose, alignment: .center)
                     Text("A small commitment to yourself.").font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
@@ -666,9 +712,11 @@ private struct SignPromiseStep: View {
                         Text("Clear").font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink.opacity(0.5)).underline().padding(10)
                     }
                 }
-                // I commit / Skip live INSIDE the card
+                // I commit / Skip live INSIDE the card — it wakes up the moment ink lands.
                 PrimaryButton(title: "I commit", color: Theme.sage, action: onNext)
                     .disabled(strokes.isEmpty).opacity(strokes.isEmpty ? 0.5 : 1)
+                    .scaleEffect(strokes.isEmpty ? 0.98 : 1)
+                    .animation(Motion.bouncy, value: strokes.isEmpty)
                 Button { onNext() } label: { Text("Skip").font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).underline() }
             }
             .padding(20).background(.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))

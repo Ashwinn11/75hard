@@ -37,11 +37,17 @@ struct ProfileView: View {
                 .scrollIndicators(.hidden)
             } else {
                 Spacer()
-                ContentUnavailableView("No challenge yet", systemImage: "person.crop.circle")
+                ContentUnavailableView {
+                    Label {
+                        Text("No challenge yet")
+                    } icon: {
+                        Image(systemName: "person.crop.circle").symbolEffect(.pulse)
+                    }
+                }
                 Spacer()
             }
         }
-        .her75Background()
+        .her75Background(Theme.orchid)
         .task { await social.bootstrap() }
         .onChange(of: photoItem) { _, item in
             Task {
@@ -57,10 +63,20 @@ struct ProfileView: View {
                 ChallengePickerSheet(current: c.track) { t, drafts, start, days in
                     switchChallenge(c, to: t, drafts: drafts, start: start, days: days)
                 }
+                .presentationCornerRadius(34)
+                .presentationDragIndicator(.visible)
             }
         }
-        .sheet(isPresented: $showSettings) { SettingsView() }
-        .sheet(isPresented: $showBioEdit) { NavigationStack { EditBioView() } }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .presentationCornerRadius(34)
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showBioEdit) {
+            NavigationStack { EditBioView() }
+                .presentationCornerRadius(34)
+                .presentationDragIndicator(.visible)
+        }
     }
 
     @ViewBuilder private var bioLine: some View {
@@ -135,7 +151,7 @@ struct ChallengePickerSheet: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: 24) {
-                    ForEach(ChallengeTrack.catalog) { t in
+                    ForEach(Array(ChallengeTrack.catalog.enumerated()), id: \.element.id) { i, t in
                         Button {
                             if t == current { dismiss() }
                             else { Haptics.tap(); setup.pick(t); path.append(.tasks) }
@@ -150,6 +166,7 @@ struct ChallengePickerSheet: View {
                                 }
                         }
                         .buttonStyle(PressableStyle())
+                        .staggeredAppear(index: i)
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 28)

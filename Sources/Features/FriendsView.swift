@@ -56,7 +56,7 @@ struct FriendsView: View {
                 friendsList
             }
         }
-        .her75Background()
+        .her75Background(accent)
         .task {
             await social.bootstrap()
             await social.setDisplayName(myName)
@@ -64,11 +64,15 @@ struct FriendsView: View {
         }
         .sheet(isPresented: $showAdd) {
             AddFriendsSheet(accent: accent, myName: myName, shareText: shareText)
+                .presentationCornerRadius(34)
+                .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedFriend) { f in
             FriendProfileSheet(friend: f, accent: accent) {
                 Task { await social.unfriend(f.id) }
             }
+            .presentationCornerRadius(34)
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -86,6 +90,7 @@ struct FriendsView: View {
         VStack(spacing: 16) {
             Image(systemName: "icloud.slash")
                 .font(.system(size: 44, weight: .light)).foregroundStyle(accent)
+                .symbolEffect(.pulse)
             Text(message)
                 .font(Font2.serif(20, .medium)).italic()
                 .foregroundStyle(Theme.ink.opacity(0.65)).multilineTextAlignment(.center)
@@ -115,8 +120,10 @@ struct FriendsView: View {
                 } else {
                     // Friends exist → just their daily checklists. Your code + adding lives behind +.
                     VStack(spacing: 16) {
-                        ForEach(social.friends) { f in
+                        ForEach(Array(social.friends.enumerated()), id: \.element.id) { i, f in
                             FriendRow(friend: f, accent: accent) { selectedFriend = f }
+                                .staggeredAppear(index: i)
+                                .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                     }
                 }
@@ -125,12 +132,12 @@ struct FriendsView: View {
         }
         .scrollIndicators(.hidden)
         .refreshable { await social.refresh() }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.friends)
+        .animation(Motion.bouncy, value: social.friends)
     }
 
     private var emptyFriends: some View {
         VStack(spacing: 10) {
-            Image(systemName: "person.2").font(.system(size: 30, weight: .light)).foregroundStyle(accent)
+            Image(systemName: "person.2").font(.system(size: 30, weight: .light)).foregroundStyle(accent).symbolEffect(.pulse)
             Text("No friends yet. Share your code or add someone by theirs to check in on each other.")
                 .font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -289,9 +296,9 @@ private struct AddFriendsSheet: View {
             .background(Theme.paper.ignoresSafeArea())
             .navigationTitle("Add friends").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.outgoing)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.incoming)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.suggested)
+            .animation(Motion.snappy, value: social.outgoing)
+            .animation(Motion.snappy, value: social.incoming)
+            .animation(Motion.snappy, value: social.suggested)
         }
         .task {
             loading = social.suggested.isEmpty      // show cached list instantly, refresh behind it
@@ -302,7 +309,7 @@ private struct AddFriendsSheet: View {
 
     private var suggestionsEmpty: some View {
         VStack(spacing: 8) {
-            Image(systemName: "sparkles").font(.system(size: 26, weight: .light)).foregroundStyle(accent)
+            Image(systemName: "sparkles").font(.system(size: 26, weight: .light)).foregroundStyle(accent).symbolEffect(.pulse)
             Text("No one to suggest just yet — check back soon as more girls join.")
                 .font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
         }
@@ -392,13 +399,13 @@ private struct RequestsView: View {
         .background(Theme.paper.ignoresSafeArea())
         .navigationTitle("Requests").navigationBarTitleDisplayMode(.inline)
         .refreshable { await social.refresh() }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.incoming)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: social.outgoing)
+        .animation(Motion.snappy, value: social.incoming)
+        .animation(Motion.snappy, value: social.outgoing)
     }
 
     private var empty: some View {
         VStack(spacing: 8) {
-            Image(systemName: "tray").font(.system(size: 26, weight: .light)).foregroundStyle(accent)
+            Image(systemName: "tray").font(.system(size: 26, weight: .light)).foregroundStyle(accent).symbolEffect(.pulse)
             Text("No requests right now.").font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity).padding(.vertical, 24).softCard()
@@ -492,7 +499,7 @@ private struct AddFriendField: View {
                               accent: accent) { send(found) }
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: found?.id)
+        .animation(Motion.snappy, value: found?.id)
     }
 
     private func check() {
@@ -677,6 +684,7 @@ struct ProgressCapsule: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.ring)
                 Capsule().fill(accent).frame(width: max(6, geo.size.width * fraction))
+                    .animation(Motion.gentle, value: fraction)
             }
         }
         .frame(height: 6)

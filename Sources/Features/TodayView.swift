@@ -28,20 +28,36 @@ struct TodayView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(c.habitsOrdered.enumerated()), id: \.element.id) { i, h in
                             HabitRow(habit: h, date: date(c)) { handleAction(c) }
+                                .staggeredAppear(index: i)
                             if i < c.habitsOrdered.count - 1 { Divider().padding(.leading, 112) }
                         }
                     }
                     .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 30)
+                    .animation(Motion.snappy, value: dayIndex)
                 }
                 .scrollIndicators(.hidden)
+                // Rows melt into the paper instead of clipping at the scroll edges.
+                .mask {
+                    LinearGradient(stops: [.init(color: .clear, location: 0),
+                                           .init(color: .black, location: 0.025),
+                                           .init(color: .black, location: 0.97),
+                                           .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
                 .onAppear { if dayIndex == 0 { dayIndex = max(c.currentDay - 1, 0) } }
             } else {
                 Spacer()
-                ContentUnavailableView("No challenge yet", systemImage: "checklist")
+                ContentUnavailableView {
+                    Label {
+                        Text("No challenge yet")
+                    } icon: {
+                        Image(systemName: "checklist").symbolEffect(.pulse)
+                    }
+                }
                 Spacer()
             }
         }
-        .her75Background()
+        .her75Background(Theme.coral)
         .sheet(isPresented: $editing) { if let c = challenge { EditHabitsSheet(challenge: c) } }
         .task {
             await SocialStore.shared.bootstrap()
@@ -90,6 +106,8 @@ struct HabitRow: View {
     var onAction: () -> Void = {}
     @Environment(\.modelContext) private var context
     @State private var photoItem: PhotosPickerItem?
+    @State private var checkCenter: CGPoint = .zero
+    @State private var rippleTrigger = 0
 
     private var done: Bool { habit.completion(on: date) != nil }
     private var thumb: UIImage? {
@@ -103,6 +121,7 @@ struct HabitRow: View {
                 ZStack {
                     if let img = thumb {
                         Image(uiImage: img).resizable().scaledToFill()
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
                     } else {
                         Theme.chipFill
                         Image(systemName: "camera.fill")
@@ -111,6 +130,7 @@ struct HabitRow: View {
                 }
                 .frame(width: 84, height: 112)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .animation(Motion.bouncy, value: thumb != nil)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -119,6 +139,7 @@ struct HabitRow: View {
                     .foregroundStyle(done ? Theme.ink.opacity(0.4) : Theme.ink)
                     .strikethrough(done, color: Theme.ink.opacity(0.5))
                     .lineLimit(2)
+                    .animation(Motion.snappy, value: done)
                 if let comp = habit.completion(on: date) {
                     Text("Logged \(comp.loggedAt.formatted(date: .omitted, time: .shortened))")
                         .font(Font2.sans(11, .semibold)).foregroundStyle(Theme.ink.opacity(0.4))
@@ -127,16 +148,23 @@ struct HabitRow: View {
 
             Spacer(minLength: 8)
 
-            Button { Haptics.tap(); HabitActions.toggle(habit, on: date, context: context); onAction() } label: {
-                ZStack {
-                    Circle().fill(done ? Theme.ink : Color.clear).frame(width: 28, height: 28)
-                    Circle().stroke(done ? Theme.ink : Theme.ring, lineWidth: 2).frame(width: 28, height: 28)
-                    if done { Image(systemName: "checkmark").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white) }
-                }
+            Button {
+                Haptics.tap()
+                if !done { rippleTrigger += 1 }     // the liquid pulse fires on check, not uncheck
+                HabitActions.toggle(habit, on: date, context: context)
+                onAction()
+            } label: {
+                CheckCircle(done: done)
             }
             .buttonStyle(.plain)
+            .onGeometryChange(for: CGPoint.self) { proxy in
+                let f = proxy.frame(in: .named("habitRow"))
+                return CGPoint(x: f.midX, y: f.midY)
+            } action: { checkCenter = $0 }
         }
         .padding(.vertical, 14)
+        .coordinateSpace(.named("habitRow"))
+        .rippleOnTap(at: checkCenter, trigger: rippleTrigger)
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
@@ -152,6 +180,34 @@ struct HabitRow: View {
     }
 }
 
+// MARK: - Check circle — ink fill pops in, the checkmark draws itself on
+
+private struct CheckCircle: View {
+    var done: Bool
+    var body: some View {
+        ZStack {
+            Circle().fill(Theme.ink).scaleEffect(done ? 1 : 0.4).opacity(done ? 1 : 0)
+            Circle().stroke(done ? Theme.ink : Theme.ring, lineWidth: 2)
+            CheckShape()
+                .trim(from: 0, to: done ? 1 : 0)
+                .stroke(.white, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                .frame(width: 12, height: 10)
+        }
+        .frame(width: 28, height: 28)
+        .animation(Motion.pop, value: done)
+    }
+}
+
+private struct CheckShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.55))
+        p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.36, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        return p
+    }
+}
+
 // MARK: - Day celebration — sticky note + poppers + dustbin on a blurred screen (tap to dismiss)
 
 /// Hoisted to RootView so the celebration can blur and cover the whole screen (incl. the tab bar).
@@ -164,33 +220,64 @@ struct DayCelebration: View {
     var day: Int
     var onDone: () -> Void
     @State private var show = false
+    @State private var exiting = false          // note crumples, shrinks, and drops into the trash
+    @State private var crumple: CGFloat = 0
+    @State private var swallowed = false        // trash squash-and-stretch as it "eats" the note
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            // No solid background — the screen behind is blurred by the parent.
-            ConfettiBurst().allowsHitTesting(false)
-            VStack(spacing: 0) {
-                Spacer()
-                note
-                    .scaleEffect(show ? 1 : 0.5)
-                    .opacity(show ? 1 : 0)
-                Spacer()
-                Image(systemName: "trash.fill")
-                    .font(.system(size: 80, weight: .regular))
-                    .foregroundStyle(Theme.ink.opacity(0.7))
-                    .padding(.bottom, 56)
-                    .opacity(show ? 1 : 0)
+        GeometryReader { geo in
+            ZStack {
+                // No solid background — the screen behind is blurred by the parent.
+                ConfettiBurst().allowsHitTesting(false)
+                VStack(spacing: 0) {
+                    Spacer()
+                    note
+                        .shimmerOnce(delay: 0.7)
+                        .modifier(CrumpleEffect(progress: crumple))
+                        .scaleEffect(exiting ? 0.16 : (show ? 1 : 0.4))
+                        .rotationEffect(.degrees(exiting ? 22 : (show ? 0 : -5)))
+                        .offset(y: exiting ? geo.size.height / 2 - 130 : 0)
+                        .opacity(show && !swallowed ? 1 : 0)
+                    Spacer()
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 80, weight: .regular))
+                        .foregroundStyle(Theme.ink.opacity(0.7))
+                        .scaleEffect(x: swallowed ? 1.1 : 1, y: swallowed ? 0.86 : 1, anchor: .bottom)
+                        .animation(Motion.bouncy, value: swallowed)
+                        .padding(.bottom, 56)
+                        .opacity(show ? 1 : 0)
+                }
+                Text("Tap to dismiss")
+                    .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink.opacity(0.4))
+                    .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 18)
+                    .opacity(show && !exiting ? 1 : 0)
             }
-            Text("Tap to dismiss")
-                .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink.opacity(0.4))
-                .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 18)
-                .opacity(show ? 1 : 0)
+            .contentShape(Rectangle())
+            .onTapGesture { dismiss() }
+            .onAppear {
+                // Success, then two light ticks timed to the corner poppers.
+                Haptics.success()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { Haptics.light() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { Haptics.light() }
+                withAnimation(Motion.bouncy) { show = true }
+            }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { onDone() }
-        .onAppear {
-            Haptics.success()
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { show = true }
+    }
+
+    /// The note crumples into a ball, drops into the dustbin, the bin gulps — then we're done.
+    private func dismiss() {
+        guard !exiting else { return }
+        if reduceMotion { onDone(); return }
+        Haptics.tap()
+        withAnimation(.easeIn(duration: 0.55)) {
+            exiting = true
+            crumple = 1
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            swallowed = true
+            Haptics.rigid()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onDone() }
         }
     }
 
@@ -208,48 +295,73 @@ struct DayCelebration: View {
     }
 }
 
-// MARK: - Confetti / celebratory poppers
+// MARK: - Confetti — two corner poppers, one Canvas, real physics
 
 struct ConfettiBurst: View {
-    private let colors: [Color] = [Theme.coral, Theme.periwinkle, Theme.sage, Theme.orchid, Theme.taupe]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start: Date? = nil
+    @State private var finished = false
+
+    private static let palette: [Color] = [Theme.coral, Theme.periwinkle, Theme.sage, Theme.orchid, Theme.taupe]
+    private static let pieceCount = 120
+    private static let gravity: CGFloat = 1350
+
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                ForEach(0..<90, id: \.self) { i in
-                    ConfettiPiece(seed: i, color: colors[i % colors.count], area: geo.size)
-                }
+        TimelineView(.animation(paused: finished || reduceMotion)) { tl in
+            Canvas { ctx, size in
+                guard let start else { return }
+                let t = tl.date.timeIntervalSince(start)
+                for i in 0..<Self.pieceCount { draw(piece: i, at: t, in: size, ctx: ctx) }
             }
         }
         .ignoresSafeArea()
+        .onAppear {
+            guard !reduceMotion else { return }
+            start = Date()
+            // Longest delay + lifetime ≈ 3.4s; stop the TimelineView shortly after.
+            Task { try? await Task.sleep(for: .seconds(3.6)); finished = true }
+        }
     }
-}
 
-struct ConfettiPiece: View {
-    let seed: Int
-    let color: Color
-    let area: CGSize
-    @State private var t: CGFloat = 0
-
-    // deterministic pseudo-random so pieces don't reshuffle on every render
-    private func rnd(_ salt: Int) -> CGFloat {
+    // Deterministic pseudo-random so pieces don't reshuffle between frames.
+    private func rnd(_ seed: Int, _ salt: Int) -> CGFloat {
         let x = sin(Double(seed) * 12.9898 + Double(salt) * 78.233) * 43758.5453
         return CGFloat(x - x.rounded(.down))
     }
 
-    var body: some View {
-        let startX = rnd(1) * area.width
-        let drift = (rnd(2) - 0.5) * 160
-        let w = 7 + rnd(3) * 7
-        let h = 10 + rnd(4) * 9
-        let spin = 360.0 * Double(1 + rnd(5) * 3)
-        let delay = Double(rnd(6)) * 0.5
-        RoundedRectangle(cornerRadius: 2)
-            .fill(color)
-            .frame(width: w, height: h)
-            .rotationEffect(.degrees(Double(t) * spin))
-            .position(x: startX + drift * t, y: -40 + t * (area.height + 120))
-            .opacity(t > 0.9 ? max(0, (1 - t) / 0.1) : 1)
-            .onAppear { withAnimation(.easeIn(duration: 2.6).delay(delay)) { t = 1 } }
+    private func draw(piece i: Int, at t: TimeInterval, in size: CGSize, ctx: GraphicsContext) {
+        let leftPopper = i % 2 == 0
+        let delay = Double(rnd(i, 1)) * 0.35 + (leftPopper ? 0 : 0.12)
+        let te = CGFloat(t - delay)
+        guard te > 0 else { return }
+
+        // Launch: up and inward from a bottom corner, with spread.
+        let origin = CGPoint(x: leftPopper ? size.width * 0.05 : size.width * 0.95, y: size.height + 10)
+        let baseAngle: CGFloat = leftPopper ? -1.20 : -1.94          // radians; ±~69° from vertical
+        let angle = baseAngle + (rnd(i, 2) - 0.5) * 0.66
+        let speed = 950 + rnd(i, 3) * 650
+        let vx = cos(angle) * speed
+        let vy = sin(angle) * speed
+
+        // Flight: ballistic + side-to-side flutter as the piece sheds speed.
+        let flutter = sin(te * (3 + rnd(i, 4) * 3) + rnd(i, 5) * 6) * 26 * min(te, 1.4)
+        let x = origin.x + vx * te + flutter
+        let y = origin.y + vy * te + 0.5 * Self.gravity * te * te
+        guard y < size.height + 30 else { return }
+
+        let life = 2.4 + Double(rnd(i, 6)) * 0.6
+        let alpha = t - delay > life - 0.5 ? max(0, (life - (t - delay)) / 0.5) : 1
+        guard alpha > 0 else { return }
+
+        // Tumble: rotation + the width collapsing through 0 reads as a 3D flip.
+        let w = (7 + rnd(i, 7) * 7) * abs(cos(te * (4 + rnd(i, 8) * 4)))
+        let h = 10 + rnd(i, 9) * 9
+        var p = ctx
+        p.translateBy(x: x, y: y)
+        p.rotate(by: .radians(Double(te) * (2 + Double(rnd(i, 10)) * 6)))
+        p.opacity = alpha
+        p.fill(Path(roundedRect: CGRect(x: -w / 2, y: -h / 2, width: w, height: h), cornerRadius: 2),
+               with: .color(Self.palette[i % Self.palette.count]))
     }
 }
 
@@ -277,6 +389,8 @@ struct TabHeader<Trailing: View>: View {
     private var dayPill: some View {
         Text("day \(day)")
             .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+            .contentTransition(.numericText())
+            .animation(Motion.snappy, value: day)
             .padding(.horizontal, 11).padding(.vertical, 4)
             .background(.white, in: Capsule())
             .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
@@ -315,6 +429,8 @@ struct EditHabitsSheet: View {
                                   ? { context.delete(h); try? context.save() } : nil)
             }
         }
+        .presentationCornerRadius(34)
+        .presentationDragIndicator(.visible)
     }
 
     /// Live Habit ⇄ HabitDraft adapter: every edit writes straight through to the model.
