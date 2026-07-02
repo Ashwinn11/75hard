@@ -295,6 +295,23 @@ struct RulerSlider: View {
     }
 }
 
+// MARK: - Floating pill (the frosted badge used across the app)
+
+/// The one small floating badge — a frosted `.ultraThinMaterial` capsule with a soft shadow.
+/// Used for taglines/counts on the welcome, partner, invite, and challenge-card screens, plus
+/// the Today day pill. Frosted (not plain white) so it blurs whatever sits behind it.
+struct FloatingPill<Content: View>: View {
+    var hPad: CGFloat = 14
+    var vPad: CGFloat = 8
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        content()
+            .padding(.horizontal, hPad).padding(.vertical, vPad)
+            .background(.ultraThinMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.12), radius: 7, y: 3)
+    }
+}
+
 // MARK: - Challenge photo-strip card (4 photos + floating pill + title)
 
 /// The one challenge card used everywhere — onboarding's library, the profile card, and the
@@ -302,7 +319,6 @@ struct RulerSlider: View {
 struct ChallengeStripCard: View {
     let track: ChallengeTrack
     var pillText: String? = nil      // override for the floating pill; nil → the track's tagline
-    var height: CGFloat = 108
     var showTitle = true
 
     private var pill: String? { pillText ?? (track.tagline.isEmpty ? nil : track.tagline) }
@@ -317,24 +333,37 @@ struct ChallengeStripCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .top) {
-                HStack(spacing: 3) {
-                    ForEach(Array(track.photos.enumerated()), id: \.offset) { i, p in
-                        PhotoFill(name: p, fallback: HabitColor.palette[(seed + i) % HabitColor.palette.count].gradient)
-                            .frame(maxWidth: .infinity).frame(height: height).clipped()
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                if let pill {
-                    HStack(spacing: 5) {
-                        if pillText != nil {
-                            Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
+                // Color.clear locks the row to the CONTAINER width at aspect n×(3/4); inside,
+                // GeometryReader gives us that width so each cell is an EXPLICIT, identical
+                // W/4 × W/3 box — provably equal and exactly 3:4 (no flexible-frame guessing).
+                Color.clear
+                    .aspectRatio(CGFloat(track.photos.count) * 3.0 / 4.0, contentMode: .fit)
+                    .overlay {
+                        GeometryReader { geo in
+                            let n = CGFloat(track.photos.count)
+                            let gap: CGFloat = 3
+                            let cellW = (geo.size.width - gap * (n - 1)) / n
+                            HStack(spacing: gap) {
+                                ForEach(Array(track.photos.enumerated()), id: \.offset) { i, p in
+                                    PhotoFill(name: p, fallback: HabitColor.palette[(seed + i) % HabitColor.palette.count].gradient)
+                                        .frame(width: cellW, height: geo.size.height)
+                                        .clipped()
+                                }
+                            }
                         }
-                        Text(pill).font(Font2.sans(11, .bold))
                     }
-                    .foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(.white, in: Capsule())
-                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2).offset(y: -11)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                if let pill {
+                    FloatingPill(hPad: 10, vPad: 5) {
+                        HStack(spacing: 5) {
+                            if pillText != nil {
+                                Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
+                            }
+                            Text(pill).font(Font2.sans(11, .bold))
+                        }
+                        .foregroundStyle(Theme.ink)
+                    }
+                    .offset(y: -11)   // float above the top edge, horizontally centered
                 }
             }
             if showTitle && pillText == nil {   // pill already names the challenge — don't repeat it below
@@ -356,7 +385,7 @@ struct TaskListEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ChallengeStripCard(track: track, height: 96, showTitle: false)
+            ChallengeStripCard(track: track, showTitle: false)
             Button { onAdd() } label: {
                 Text("Create Daily Task +").font(Font2.sans(15, .bold)).foregroundStyle(Theme.ink.opacity(0.6))
                     .frame(maxWidth: .infinity).padding(.vertical, 15)

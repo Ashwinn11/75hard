@@ -480,13 +480,12 @@ struct TabHeader<Trailing: View>: View {
     }
 
     private var dayPill: some View {
-        Text("day \(day)")
-            .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-            .contentTransition(.numericText())
-            .animation(Motion.snappy, value: day)
-            .padding(.horizontal, 11).padding(.vertical, 4)
-            .background(.white, in: Capsule())
-            .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
+        FloatingPill(hPad: 11, vPad: 4) {
+            Text("day \(day)")
+                .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+                .contentTransition(.numericText())
+                .animation(Motion.snappy, value: day)
+        }
     }
 }
 

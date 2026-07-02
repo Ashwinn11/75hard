@@ -550,13 +550,14 @@ private struct AddFriendField: View {
 
 // MARK: - Rows
 
-/// A friend's card — their avatar + day on the left, their live daily checklist on the right.
-/// Tapping the avatar opens their profile.
-/// Internal: onboarding's FriendsPreviewStep renders the same card over sample data.
 struct FriendRow: View {
     let friend: FriendStatus
     let accent: Color
     var onTapAvatar: () -> Void = {}
+    /// Onboarding-only: how many habits are visually checked (nil = use h.done directly)
+    var tickedCount: Int? = nil
+    /// Onboarding-only: toggled per-habit to fire the pop bounce
+    var bumpID: [Bool] = []
 
     private var ring: LinearGradient {
         LinearGradient(colors: [Theme.clay, Theme.mauve], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -584,22 +585,30 @@ struct FriendRow: View {
                         .font(Font2.sans(14, .medium)).foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    ForEach(friend.habits.prefix(3)) { h in
+                    ForEach(Array(friend.habits.prefix(3).enumerated()), id: \.element.id) { idx, h in
+                        // In onboarding, done is driven by tickedCount; otherwise use h.done.
+                        let isDone = tickedCount.map { idx < $0 } ?? h.done
+                        let bump   = bumpID.indices.contains(idx) ? bumpID[idx] : false
                         HStack(alignment: .top, spacing: 11) {
-                            Image(systemName: h.done ? "checkmark.circle.fill" : "circle")
+                            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                                 .font(.system(size: 21, weight: .regular))
-                                .foregroundStyle(h.done ? Theme.ink : Theme.ring)
+                                .foregroundStyle(isDone ? Theme.ink : Theme.ring)
+                                // Pop bounce when this specific habit gets ticked.
+                                .scaleEffect(isDone ? 1.0 : 1.0)   // stable baseline
+                                .id(bump)   // identity change triggers the transition below
+                                .transition(.scale(scale: 1.35).combined(with: .opacity))
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(h.title)
-                                    .font(Font2.sans(14, h.done ? .semibold : .medium))
-                                    .foregroundStyle(h.done ? Theme.ink : Theme.ink.opacity(0.45))
+                                    .font(Font2.sans(14, isDone ? .semibold : .medium))
+                                    .foregroundStyle(isDone ? Theme.ink : Theme.ink.opacity(0.45))
                                     .fixedSize(horizontal: false, vertical: true)
-                                if h.done, !h.time.isEmpty {
+                                if isDone, !h.time.isEmpty {
                                     Text(h.time).font(Font2.sans(11, .medium)).foregroundStyle(Theme.textSecondary)
                                 }
                             }
                             Spacer(minLength: 0)
                         }
+                        .animation(Motion.bouncy, value: isDone)
                     }
                     if friend.habits.count > 3 {
                         Text("+\(friend.habits.count - 3) more")
@@ -614,6 +623,7 @@ struct FriendRow: View {
         .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
     }
 }
+
 
 private struct RequestRow: View {
     let person: PersonRef

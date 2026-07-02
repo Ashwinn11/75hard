@@ -75,29 +75,39 @@ struct TypewriterHeadline: View {
 
 // MARK: - Photo marquee (welcome wall)
 
-private struct MarqueeColumn: View {
+private struct MarqueeRow: View {
     let names: [String]
-    var up: Bool
+    var leftward: Bool
     var speed: Double
-    private let itemH: CGFloat = 150
+    private let tileW: CGFloat = 120
+    private var tileH: CGFloat { tileW * 4 / 3 }     // locked 3:4 portrait
     private let gap: CGFloat = 10
     @State private var offset: CGFloat = 0
 
     var body: some View {
-        let loop = names + names
-        VStack(spacing: gap) {
-            ForEach(Array(loop.enumerated()), id: \.offset) { _, n in
-                PhotoFill(name: n, fallback: gradientFor(n))
-                    .frame(height: itemH).frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        let loop = names + names                     // two sets → seamless wrap
+        // Color.clear is flexible — it returns the proposed width, not the natural
+        // HStack width (~3900 pt). This prevents MarqueeRow from inflating the parent
+        // VStack beyond screen bounds. The HStack lives in an overlay so it never
+        // contributes to layout size.
+        Color.clear
+            .frame(height: tileH)
+            .overlay(alignment: .leading) {
+                HStack(spacing: gap) {
+                    ForEach(Array(loop.enumerated()), id: \.offset) { _, n in
+                        PhotoFill(name: n, fallback: gradientFor(n))
+                            .frame(width: tileW, height: tileH)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+                .offset(x: offset)
             }
-        }
-        .offset(y: offset)
-        .onAppear {
-            let total = (itemH + gap) * CGFloat(names.count)
-            offset = up ? 0 : -total
-            withAnimation(.linear(duration: speed).repeatForever(autoreverses: false)) { offset = up ? -total : 0 }
-        }
+            .clipped()
+            .onAppear {
+                let total = (tileW + gap) * CGFloat(names.count)
+                offset = leftward ? 0 : -total
+                withAnimation(.linear(duration: speed).repeatForever(autoreverses: false)) { offset = leftward ? -total : 0 }
+            }
     }
     private func gradientFor(_ n: String) -> LinearGradient {
         let palette: [HabitColor] = [.blush, .lilac, .sand, .sage, .rose, .sky]
@@ -108,17 +118,24 @@ private struct MarqueeColumn: View {
     }
 }
 
+/// A horizontal photo wall: two rows of 3:4 tiles drifting in opposite directions.
 struct PhotoMarquee: View {
-    var names: [String] = (1...12).map { "onb_g\($0)" }
+    var names: [String] = (1...15).map { "onb_g\($0)" }
     var body: some View {
-        let cols = stride(from: 0, to: names.count, by: 4).map { Array(names[$0..<min($0 + 4, names.count)]) }
-        HStack(spacing: 10) {
-            ForEach(Array(cols.enumerated()), id: \.offset) { i, col in
-                MarqueeColumn(names: col, up: i % 2 == 0, speed: 22 + Double(i) * 4)
+        let rows = split(names, into: 2)
+        VStack(spacing: 10) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                MarqueeRow(names: row, leftward: i % 2 == 0, speed: 18 + Double(i) * 6)
             }
         }
         .frame(maxWidth: .infinity)
-        .mask(LinearGradient(colors: [.clear, .black, .black, .black, .clear], startPoint: .top, endPoint: .bottom))
+        .clipped()
+        .mask(LinearGradient(colors: [.clear, .black, .black, .black, .clear], startPoint: .leading, endPoint: .trailing))
+    }
+    private func split(_ names: [String], into count: Int) -> [[String]] {
+        var rows = Array(repeating: [String](), count: count)
+        for (i, n) in names.enumerated() { rows[i % count].append(n) }
+        return rows
     }
 }
 
@@ -165,32 +182,35 @@ struct AnimatedChips: View {
 private struct FlowChips: View {
     let items: [(icon: String, text: String)]
     let shownCount: Int
+
+    // Scatter the chips around the photo's edges so the subject in the center stays clear.
+    private let spots: [(alignment: Alignment, offset: CGSize)] = [
+        (.topLeading,     CGSize(width:  6, height:  16)),
+        (.topTrailing,    CGSize(width: -6, height:  46)),
+        (.bottomLeading,  CGSize(width: 10, height: -30)),
+        (.bottomTrailing, CGSize(width: -8, height: -16)),
+        (.bottom,         CGSize(width: 24, height: -96)),
+    ]
+
     var body: some View {
-        VStack(spacing: 12) {
-            ForEach(Array(rows().enumerated()), id: \.offset) { _, row in
-                HStack(spacing: 12) {
-                    ForEach(row, id: \.0) { idx, item in
-                        if idx < shownCount {
-                            HStack(spacing: 6) {
-                                Image(systemName: item.icon).font(.system(size: 13, weight: .bold))
-                                Text(item.text).font(Font2.sans(15, .bold))
-                            }
-                            .foregroundStyle(Theme.ink)
-                            .padding(.horizontal, 16).padding(.vertical, 11)
-                            .background(.white, in: Capsule())
-                            .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
-                            .transition(.scale.combined(with: .opacity))
+        ZStack {
+            ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+                if i < shownCount {
+                    let spot = spots[i % spots.count]
+                    FloatingPill(hPad: 15, vPad: 10) {
+                        HStack(spacing: 6) {
+                            Image(systemName: item.icon).font(.system(size: 13, weight: .bold))
+                            Text(item.text).font(Font2.sans(15, .bold))
                         }
+                        .foregroundStyle(Theme.ink)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: spot.alignment)
+                    .offset(spot.offset)
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
         }
-    }
-    private func rows() -> [[(Int, (icon: String, text: String))]] {
-        var out: [[(Int, (icon: String, text: String))]] = []; var row: [(Int, (icon: String, text: String))] = []
-        for (i, it) in items.enumerated() { row.append((i, it)); if row.count == 2 { out.append(row); row = [] } }
-        if !row.isEmpty { out.append(row) }
-        return out
+        .padding(18)
     }
 }
 
@@ -221,44 +241,25 @@ struct SignaturePad: View {
     }
 }
 
-// MARK: - Mini phone preview (app-preview onboarding screen)
+// MARK: - App screenshot (app-preview onboarding screen)
 
-struct MiniPhonePreview: View {
-    private let cards: [(String, HabitColor)] = [
-        ("figure.run", .amber), ("drop.fill", .sage), ("book.fill", .sky), ("leaf.fill", .blush)
-    ]
+/// The real app screenshot (`Resources/Images/onb_preview.png`) shown in a phone frame.
+/// The frame's aspect matches the screenshot (1170×2532) so nothing is cropped.
+struct AppScreenshot: View {
+    var height: CGFloat = 430
+    private let aspect: CGFloat = 1170.0 / 2532.0
+
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Circle().fill(Theme.clayGradient).frame(width: 26, height: 26)
-                    .overlay(Image(systemName: "person.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white))
-                VStack(alignment: .leading, spacing: -1) {
-                    Text("DAY 6").font(Font2.sans(9, .bold)).tracking(1).foregroundStyle(Theme.rose)
-                    Text("Today").font(Font2.serif(15, .semibold)).foregroundStyle(Theme.ink)
-                }
-                Spacer()
+        Group {
+            if AppImage.exists("onb_preview") {
+                PhotoFill(name: "onb_preview")
+            } else {
+                Theme.chipFill
             }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                ForEach(Array(cards.enumerated()), id: \.offset) { _, c in
-                    RoundedRectangle(cornerRadius: 12, style: .continuous).fill(c.1.gradient)
-                        .frame(height: 58)
-                        .overlay(alignment: .bottomLeading) {
-                            Text("task").font(Font2.sans(7, .bold)).foregroundStyle(Theme.ink.opacity(0.8))
-                                .padding(.horizontal, 5).padding(.vertical, 3)
-                                .background(.ultraThinMaterial, in: Capsule()).padding(5)
-                        }
-                        .overlay(alignment: .topLeading) {
-                            Image(systemName: c.0).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.9)).padding(6)
-                        }
-                }
-            }
-            Spacer(minLength: 0)
-            HStack { ForEach(0..<5) { i in Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(i == 0 ? Theme.rose : Theme.ink.opacity(0.25)) ; if i < 4 { Spacer() } } }
         }
-        .padding(14)
-        .frame(width: 200, height: 330)
-        .background(Theme.cream, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Theme.ink.opacity(0.85), lineWidth: 6))
+        .frame(width: height * aspect, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Theme.ink.opacity(0.85), lineWidth: 6))
         .shadow(color: .black.opacity(0.15), radius: 18, y: 10)
     }
 }

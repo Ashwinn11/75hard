@@ -63,8 +63,16 @@ enum ChallengeTrack: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// 4-photo strip for the list card (falls back to gradients if the images are absent).
-    var photos: [String] { (1...4).map { "ch_\(rawValue)_\($0)" } }
+    /// 4-photo strip for the list card, deterministically drawn from the shared lifestyle pool
+    /// (`onb_g1…onb_gN`) so a given challenge always shows the SAME four photos everywhere.
+    /// Falls back to gradients if the images are absent.
+    var photos: [String] {
+        let pool = 15
+        var h = 5381
+        for b in rawValue.utf8 { h = (h &* 33) &+ Int(b) }   // deterministic (String.hashValue is per-launch)
+        h = abs(h)
+        return (0..<4).map { "onb_g\((h + $0 * 4) % pool + 1)" }   // step 4 → four distinct picks
+    }
 
     var defaultDays: Int {
         switch self {

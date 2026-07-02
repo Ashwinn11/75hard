@@ -162,14 +162,15 @@ private struct WelcomeStep: View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 PhotoMarquee().frame(height: 360).clipped()
-                Text("loved by thousands of women").font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(.white, in: Capsule()).shadow(color: .black.opacity(0.1), radius: 8, y: 4).padding(.top, 6)
-                    .popIn(delay: 0.5)
+                FloatingPill {
+                    Text("loved by thousands of women").font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+                }
+                .padding(.top, 6)
+                .popIn(delay: 0.5)
             }
             Spacer()
             OnbBottomCard {
-                TypewriterHeadline(lead: "Become her,", accent: "gently", size: 40, accentColor: Theme.rose, alignment: .center)
+                TypewriterHeadline(lead: "Become her,", accent: "gently", size: 28, accentColor: Theme.rose, alignment: .center)
                 PrimaryButton(title: "Let's do this", action: onNext)
             }
         }
@@ -184,7 +185,7 @@ private struct AppPreviewStep: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            MiniPhonePreview().popIn(delay: 0.15, from: 0.88)
+            AppScreenshot().popIn(delay: 0.15, from: 0.88)
             Spacer()
             OnbBottomCard {
                 TypewriterHeadline(lead: "Welcome to your next", accent: "75 days", size: 28, accentColor: Theme.clay, alignment: .center)
@@ -198,29 +199,55 @@ private struct AppPreviewStep: View {
 
 private struct FriendsPreviewStep: View {
     var onNext: () -> Void
-    // THE real Friends-tab card (FriendRow) over sample people, so the preview is honest.
+
+    // All habits start unchecked — the animation ticks them in after the cards land.
     private let peeks: [FriendStatus] = [
-        FriendStatus(id: "preview-mia", name: "Mia", day: 38, done: 2, total: 3,
-                     challenge: "Her 75 Challenge", updatedAt: nil,
-                     habits: [FriendHabit(title: "One 45-minute workout", done: true, time: "7:12 AM"),
-                              FriendHabit(title: "Drink only water", done: true, time: "9:30 AM"),
-                              FriendHabit(title: "Read 10 pages", done: false, time: "")]),
-        FriendStatus(id: "preview-priya", name: "Priya", day: 12, done: 1, total: 3,
-                     challenge: "75 Soft", updatedAt: nil,
-                     habits: [FriendHabit(title: "Walk 10,000 steps", done: true, time: "8:02 AM"),
-                              FriendHabit(title: "Eat clean", done: false, time: ""),
-                              FriendHabit(title: "Progress photo", done: false, time: "")]),
+        FriendStatus(id: "preview-mia", name: "Mia", day: 38, done: 0, total: 3,
+                     challenge: "Her 75 Challenge", updatedAt: nil, photo: AppImage.data("onb_g5"),
+                     habits: [FriendHabit(title: "One 45-minute workout", done: false, time: ""),
+                              FriendHabit(title: "Drink only water",       done: false, time: ""),
+                              FriendHabit(title: "Read 10 pages",           done: false, time: "")]),
+        FriendStatus(id: "preview-priya", name: "Priya", day: 12, done: 0, total: 3,
+                     challenge: "75 Soft", updatedAt: nil, photo: AppImage.data("onb_g11"),
+                     habits: [FriendHabit(title: "Walk 10,000 steps", done: false, time: ""),
+                              FriendHabit(title: "Eat clean",          done: false, time: ""),
+                              FriendHabit(title: "Progress photo",     done: false, time: "")]),
     ]
+
+    // tickedCount[cardIndex] = how many habits have been checked so far on that card.
+    @State private var tickedCount: [Int] = [0, 0]
+    // bumpID[cardIndex][habitIndex] — toggled each time that circle pops, driving .bouncy.
+    @State private var bumpID: [[Bool]] = [[false, false, false], [false, false, false]]
+
+    // Flattened tick schedule: (cardIndex, habitIndex, delay)
+    private var tickSchedule: [(card: Int, habit: Int, delay: Double)] {
+        // Cards stagger-appear over ~0.6 s. Start ticking at 0.9 s.
+        let base = 0.9
+        let gap  = 0.55
+        return [
+            (0, 0, base),
+            (0, 1, base + gap),
+            (1, 0, base + gap * 2),
+            (0, 2, base + gap * 3),
+            (1, 1, base + gap * 4),
+            (1, 2, base + gap * 5),
+        ]
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            // Zig-zag scatter: cards alternate lean and offset, like snapshots on a pinboard.
             VStack(spacing: 18) {
                 ForEach(Array(peeks.enumerated()), id: \.element.id) { i, f in
-                    FriendRow(friend: f, accent: Theme.olive)
-                        .rotationEffect(.degrees(i.isMultiple(of: 2) ? -2.2 : 2.2))
-                        .offset(x: i.isMultiple(of: 2) ? -12 : 12)
-                        .staggeredAppear(index: i)
+                    FriendRow(
+                        friend: f,
+                        accent: Theme.olive,
+                        tickedCount: tickedCount[i],
+                        bumpID: bumpID[i]
+                    )
+                    .rotationEffect(.degrees(i.isMultiple(of: 2) ? -2.2 : 2.2))
+                    .offset(x: i.isMultiple(of: 2) ? -12 : 12)
+                    .staggeredAppear(index: i)
                 }
             }
             .padding(.horizontal, 30)
@@ -228,6 +255,21 @@ private struct FriendsPreviewStep: View {
             OnbBottomCard {
                 TypewriterHeadline(lead: "Follow your", accent: "friends", size: 32, accentColor: Theme.olive, alignment: .center)
                 PrimaryButton(title: "Continue", color: Theme.olive, action: onNext)
+            }
+        }
+        .onAppear { scheduleTicks() }
+    }
+
+    private func scheduleTicks() {
+        for t in tickSchedule {
+            DispatchQueue.main.asyncAfter(deadline: .now() + t.delay) {
+                withAnimation(Motion.bouncy) {
+                    if tickedCount[t.card] == t.habit {
+                        tickedCount[t.card] += 1
+                    }
+                    bumpID[t.card][t.habit].toggle()
+                }
+                Haptics.light()
             }
         }
     }
@@ -250,6 +292,7 @@ private struct ChipsStep: View {
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous)).padding(.horizontal, 30)
                 AnimatedChips(items: [("heart.fill", "healthy"), ("bolt.fill", "fit"),
                                       ("sparkles", "glowing"), ("scope", "focused"), ("leaf.fill", "calm")])
+                    .padding(.horizontal, 30)   // match the photo bounds so chips hug its corners
             }
             Spacer(minLength: 18)
             OnbBottomCard {
@@ -485,7 +528,7 @@ private struct PartnerUpStep: View {
             Spacer(minLength: 10)
             Group {
                 if AppImage.exists("onb_together") {
-                    PhotoFill(name: "onb_together")
+                    PhotoFill(name: "onb_together", anchor: UnitPoint(x: 0.5, y: 0.75))   // lower-middle: the two women, raised off the very bottom
                 } else {
                     ZStack {
                         LinearGradient(colors: [Theme.olive.opacity(0.55), Theme.olive],
@@ -500,10 +543,11 @@ private struct PartnerUpStep: View {
             Text("Add your friends, see their progress, and keep each other accountable through the challenge.")
                 .font(Font2.sans(14, .medium)).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center).padding(.horizontal, 36).padding(.top, 8)
-            Text("together, you're twice as likely to finish")
-                .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(.white, in: Capsule()).shadow(color: .black.opacity(0.06), radius: 6, y: 3).padding(.top, 14)
+            FloatingPill {
+                Text("together, you're twice as likely to finish")
+                    .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+            }
+            .padding(.top, 14)
                 .popIn(delay: 0.4)
             Spacer()
             HStack(spacing: 10) {
@@ -539,10 +583,11 @@ private struct InviteTicketStep: View {
              + Text("with").font(Font2.serif(32, .semibold)).italic().foregroundColor(Theme.ink)
              + Text(" your friends?").font(Font2.serif(32, .semibold)).foregroundColor(Theme.ink))
                 .multilineTextAlignment(.center).padding(.top, 8).padding(.horizontal, 24)
-            Text("together, you're twice as likely to finish")
-                .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(.white, in: Capsule()).shadow(color: .black.opacity(0.06), radius: 6, y: 3).padding(.top, 16)
+            FloatingPill {
+                Text("together, you're twice as likely to finish")
+                    .font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+            }
+            .padding(.top, 16)
                 .popIn(delay: 0.4)
             Spacer()
             InviteTicket(name: model.name, code: social.myCode, challenge: model.challengeTitle)

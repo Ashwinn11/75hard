@@ -21,6 +21,9 @@ enum AppImage {
 
     static func exists(_ name: String) -> Bool { url(for: name) != nil }
 
+    /// Raw bytes of a bundled image (for APIs that take `Data`, e.g. sample friend avatars).
+    static func data(_ name: String) -> Data? { url(for: name).flatMap { try? Data(contentsOf: $0) } }
+
     /// Resources/Images is bundled as a folder reference, so photos live under `Images/` in the
     /// bundle. Fall back to the bundle root for any loose/flattened resources.
     private static func url(for name: String) -> URL? {
@@ -47,13 +50,33 @@ enum ProfilePhoto {
 }
 
 /// A photo that fills its frame, or a soft branded gradient if the asset is missing.
+/// `anchor` (a UnitPoint, 0…1) picks which part survives the fill-crop — default center;
+/// e.g. `UnitPoint(x: 0.5, y: 0.75)` keeps the lower-middle of the image.
 struct PhotoFill: View {
     let name: String
     var fallback: LinearGradient = Theme.clayGradient
+    var anchor: UnitPoint = .center
 
     var body: some View {
         if let ui = AppImage.ui(name) {
-            Image(uiImage: ui).resizable().scaledToFill()
+            if anchor == .center {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                // Explicit fill size, then a fractional offset within the clip, since
+                // scaledToFill always centers (and Alignment can't express a 0.75 anchor).
+                GeometryReader { geo in
+                    let scale = max(geo.size.width / ui.size.width, geo.size.height / ui.size.height)
+                    let drawnW = ui.size.width * scale
+                    let drawnH = ui.size.height * scale
+                    let overflowX = max(0, drawnW - geo.size.width)
+                    let overflowY = max(0, drawnH - geo.size.height)
+                    Image(uiImage: ui).resizable()
+                        .frame(width: drawnW, height: drawnH)
+                        .offset(x: (0.5 - anchor.x) * overflowX, y: (0.5 - anchor.y) * overflowY)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                }
+            }
         } else {
             fallback
         }
