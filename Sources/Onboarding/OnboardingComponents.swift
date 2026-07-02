@@ -185,8 +185,8 @@ private struct FlowChips: View {
 
     // Scatter the chips around the photo's edges so the subject in the center stays clear.
     private let spots: [(alignment: Alignment, offset: CGSize)] = [
-        (.topLeading,     CGSize(width:  6, height:  16)),
-        (.topTrailing,    CGSize(width: -6, height:  46)),
+        (.leading,        CGSize(width:  2, height: -52)),   // healthy — left, slightly above center
+        (.trailing,       CGSize(width: -2, height: -52)),   // fit — right, slightly above center
         (.bottomLeading,  CGSize(width: 10, height: -30)),
         (.bottomTrailing, CGSize(width: -8, height: -16)),
         (.bottom,         CGSize(width: 24, height: -96)),
@@ -261,5 +261,6 @@ struct AppScreenshot: View {
         .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Theme.ink.opacity(0.85), lineWidth: 6))
         .shadow(color: .black.opacity(0.15), radius: 18, y: 10)
+        .rotationEffect(.degrees(-4))   // slight casual tilt
     }
 }

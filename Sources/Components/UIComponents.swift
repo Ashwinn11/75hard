@@ -307,7 +307,13 @@ struct FloatingPill<Content: View>: View {
     var body: some View {
         content()
             .padding(.horizontal, hPad).padding(.vertical, vPad)
-            .background(.ultraThinMaterial, in: Capsule())
+            .background {
+                // Frosted blur + a slight white wash so it reads a touch more solid.
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().fill(.white.opacity(0.6))
+                }
+            }
             .shadow(color: .black.opacity(0.12), radius: 7, y: 3)
     }
 }
