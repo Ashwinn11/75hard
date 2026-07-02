@@ -241,6 +241,7 @@ struct DayCelebration: View {
     @State private var crumple: CGFloat = 0
     @State private var swallowed = false        // trash squash-and-stretch as it "eats" the note
     @State private var phase: Phase = .intro
+    @State private var stickerPlaced = false    // the sticker "slaps" into place, like onboarding
     @State private var stickerImage: Image?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -253,7 +254,7 @@ struct DayCelebration: View {
                 ConfettiBurst().allowsHitTesting(false)
                 intro
             } else {
-                sticker.transition(.opacity.combined(with: .scale(scale: 0.94)))
+                sticker.transition(.opacity)   // the card does its own scale slap
             }
         }
         .onAppear { runIntro() }
@@ -323,6 +324,11 @@ struct DayCelebration: View {
     private func revealSticker() {
         renderSticker()
         withAnimation(Motion.gentle) { phase = .sticker }
+        // The card slaps into place a beat after it fades in, like the onboarding plan card.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(Motion.bouncy) { stickerPlaced = true }
+            Haptics.rigid()
+        }
     }
 
     // MARK: Sticker (the finished-day receipt + save + close)
@@ -333,7 +339,8 @@ struct DayCelebration: View {
             DayStickerCard(dayWords: dayInWords(info.day), range: range,
                            tasks: info.tasks, challengeTitle: info.title, checked: true)
                 .padding(.horizontal, 42)
-                .staggeredAppear(index: 0)
+                .scaleEffect(stickerPlaced ? 1 : 1.12)
+                .rotationEffect(.degrees(stickerPlaced ? 0 : 3))
             Spacer()
             saveButton.ctaWidth().padding(.bottom, 30)
         }

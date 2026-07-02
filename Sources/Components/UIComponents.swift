@@ -534,6 +534,8 @@ struct DayStickerCard: View {
         }
         .padding(22)
         .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .foilSweepOnce(delay: 0.35)                 // laminated-sticker sheen (Metal)
         .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10)
     }
 }

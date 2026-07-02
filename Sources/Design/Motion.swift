@@ -53,6 +53,46 @@ extension View {
     }
 }
 
+// MARK: - Foil sweep (iridescent laminated-sticker sheen — shows on white, unlike shimmer)
+
+private struct FoilPhase: ViewModifier, Animatable {
+    var progress: CGFloat
+    var strength: CGFloat
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+    func body(content: Content) -> some View {
+        content.visualEffect { view, proxy in
+            view.colorEffect(ShaderLibrary.foilSweep(
+                .float2(proxy.size), .float(progress), .float(strength)))
+        }
+    }
+}
+
+private struct FoilOnce: ViewModifier {
+    var delay: Double
+    var strength: CGFloat
+    @State private var progress: CGFloat = -0.4
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(FoilPhase(progress: progress, strength: strength))
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.3).delay(delay)) { progress = 1.4 }
+            }
+    }
+}
+
+extension View {
+    /// One iridescent foil sweep (our pastels) shortly after appear — for the sticker card.
+    func foilSweepOnce(delay: Double = 0.4, strength: CGFloat = 0.3) -> some View {
+        modifier(FoilOnce(delay: delay, strength: strength))
+    }
+}
+
 // MARK: - Skeleton shimmer (looping sweep for loading placeholders — the ONE allowed loop)
 
 private struct SkeletonShimmer: ViewModifier {

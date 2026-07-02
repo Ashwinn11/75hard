@@ -37,6 +37,23 @@ static float vnoise(float2 p) {
     return half4(color.rgb + half3(half(band * strength)) * color.a, color.a);
 }
 
+// foilSweep — iridescent laminated-sticker sheen, in our pastels (colorEffect) --
+// Unlike `shimmer` (pure brightness, invisible on white), this mixes toward a tint
+// so it reads on a white card. One diagonal band that shifts clay → mauve → mist.
+
+[[stitchable]] half4 foilSweep(float2 position, half4 color, float2 size, float progress, float strength) {
+    float d = (position.x + position.y) / max(size.x + size.y, 1.0);
+    float band = 1.0 - smoothstep(0.0, 0.26, abs(d - progress));
+    band *= band;
+    float t = fract(d * 1.5 + progress * 0.5);
+    half3 clay  = half3(0.77, 0.46, 0.35);
+    half3 mauve = half3(0.66, 0.51, 0.56);
+    half3 mist  = half3(0.58, 0.66, 0.69);
+    half3 tint = t < 0.5 ? mix(clay, mauve, half(t * 2.0)) : mix(mauve, mist, half((t - 0.5) * 2.0));
+    half3 outc = mix(color.rgb, tint, half(band * strength) * color.a);
+    return half4(outc, color.a);
+}
+
 // ripple — liquid pulse radiating from a touch point (layerEffect) ------------
 
 [[stitchable]] half4 ripple(float2 position, SwiftUI::Layer layer,
