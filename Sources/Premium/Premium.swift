@@ -61,6 +61,10 @@ final class Premium {
         Task { @MainActor in
             shared.watchCustomerInfo()
             await shared.loadPlans()
+            // The icon's long-press deal row states the real % off, so the deal must be
+            // known before the first backgrounding rebuilds the menu. offerings() is
+            // cached by the SDK — this second read costs nothing.
+            await shared.loadDeal()
         }
     }
 

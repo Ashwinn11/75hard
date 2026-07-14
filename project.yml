@@ -72,8 +72,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: 75 Her
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "4"
         LSRequiresIPhoneOS: true
         UILaunchScreen:
           UIColorName: LaunchBackground
@@ -120,8 +120,8 @@ targets:
       path: Widget/Info.plist
       properties:
         CFBundleDisplayName: 75 Her
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "4"
         UIAppFonts: *fontList
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension

@@ -81,7 +81,7 @@ struct DotCalendar: View {
     var total: Int = 75
     @State private var beat = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private static let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 9), count: 15)
+    private static let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 8), count: 15)
 
     var body: some View {
         LazyVGrid(columns: Self.columns, spacing: 12) {
@@ -91,8 +91,20 @@ struct DotCalendar: View {
                     .popIn(delay: 0.2 + Double(i) * 0.012, from: 0.2)
             }
         }
+        .foilSweepOnce(delay: 1.5, strength: 0.25)     // one glint once the grid has landed
+        .padding(.horizontal, 18).padding(.vertical, 22)
+        // The frosted panel makes the hero an object — the mesh breathes through it.
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(.white.opacity(0.5)))
+        }
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .strokeBorder(Theme.ring, lineWidth: 1))
+        .shadow(color: .black.opacity(0.07), radius: 22, y: 10)
         .onAppear {
-            // Once the grid has landed, the goal-heart starts a soft ambient beat.
+            // Once the grid has landed, the goal-heart starts its ambient breathe.
             guard !reduceMotion else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { beat = true }
         }
@@ -101,14 +113,14 @@ struct DotCalendar: View {
     @ViewBuilder private func dot(_ i: Int) -> some View {
         if i == total - 1 {
             Image(systemName: "heart.fill")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Theme.berry)
-                .scaleEffect(beat ? 1.22 : 1)
-                .animation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true), value: beat)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Theme.berryGradient)
+                .symbolEffect(.breathe, isActive: beat)
         } else {
             Circle()
-                .fill(i < 7 ? Theme.berry.opacity(0.85) : Theme.ink.opacity(0.12))
-                .frame(width: 8, height: 8)
+                .fill(i < 7 ? AnyShapeStyle(Theme.berryGradient) : AnyShapeStyle(Theme.ink.opacity(0.10)))
+                .frame(width: 9, height: 9)
+                .shadow(color: i < 7 ? Theme.berry.opacity(0.35) : .clear, radius: 3, y: 1)
         }
     }
 }

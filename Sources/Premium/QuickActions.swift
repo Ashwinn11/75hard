@@ -42,8 +42,18 @@ final class QuickActions {
             : [UIApplicationShortcutItem(
                 type: Action.deal.rawValue,
                 localizedTitle: "Too expensive?",
-                localizedSubtitle: "See our best price",
+                localizedSubtitle: dealSubtitle,
                 icon: UIApplicationShortcutIcon(systemImageName: "gift"))]
+    }
+
+    /// States the actual offer ("Get 50% off the yearly plan") from the deal's computed
+    /// badge. Falls back to a no-numbers line when the discount offering isn't live or
+    /// hasn't loaded yet — never promise a percentage we can't honor.
+    private static var dealSubtitle: String {
+        if let badge = Premium.shared.deal?.badge {   // "50% OFF"
+            return "Get \(badge.lowercased()) the yearly plan"
+        }
+        return "Save on the yearly plan"
     }
 }
 

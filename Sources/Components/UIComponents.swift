@@ -446,20 +446,98 @@ struct EditTaskSheet: View {
     }
 }
 
-// MARK: - Option row (the app's one selectable-choice card — quiz answers, durations)
+// MARK: - Porcelain glass (the shared frosted-surface + selection vocabulary)
 
-/// A full-width white card with a trailing radio-check. Selection fills the check berry
-/// and draws an accent border. Optional `note` (small sub-line) and `badge` (tiny tag).
+/// The onboarding surface language: frosted glass over the breathing mesh, a hairline at
+/// rest, and a berry glow when selected. The selected gradient *border* is drawn by the
+/// owner so it can travel between a group's cards via `matchedGeometryEffect`.
+struct GlassSurface: ViewModifier {
+    var selected: Bool = false
+    var radius: CGFloat = 20
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(.white.opacity(selected ? 0.65 : 0.55)))
+            }
+            .overlay {
+                if !selected {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Theme.ring, lineWidth: 1)
+                }
+            }
+            .shadow(color: selected ? Theme.berry.opacity(0.30) : .black.opacity(0.06),
+                    radius: selected ? 18 : 14, y: selected ? 8 : 6)
+    }
+}
+
+extension View {
+    func glassCard(selected: Bool = false, radius: CGFloat = 20) -> some View {
+        modifier(GlassSurface(selected: selected, radius: radius))
+    }
+}
+
+/// The traveling selection border. Overlay on the *selected* card only; when every card in
+/// the group passes the same namespace, the border glides between them instead of blinking.
+struct SelectionBorder: View {
+    var radius: CGFloat = 20
+    var ns: Namespace.ID? = nil
+    var body: some View {
+        let border = RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .strokeBorder(Theme.berryGradient, lineWidth: 1.6)
+        if let ns {
+            border.matchedGeometryEffect(id: "optionSel", in: ns)
+        } else {
+            border
+        }
+    }
+}
+
+/// The filled check seal that confirms a selection (blur-morphs in).
+struct CheckSeal: View {
+    var size: CGFloat = 26
+    var body: some View {
+        ZStack {
+            Circle().fill(Theme.berryGradient)
+            Image(systemName: "checkmark")
+                .font(.system(size: size * 0.42, weight: .heavy)).foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+        .transition(.blurReplace)
+    }
+}
+
+// MARK: - Option row (the app's one selectable-choice card — quiz answers, custom length)
+
+/// A full-width porcelain-glass card: optional leading icon chip, title/note/badge, and a
+/// trailing check seal. Pass the picker group's `selectionNS` so the gradient border
+/// travels between the group's rows; leave nil for a static border.
 struct OptionRow: View {
     let title: String
     var note: String? = nil
     var badge: String? = nil
+    var icon: String? = nil
+    var selectionNS: Namespace.ID? = nil
     let selected: Bool
     var action: () -> Void
 
     var body: some View {
-        Button { Haptics.select(); action() } label: {
-            HStack(spacing: 12) {
+        Button { Haptics.select(); withAnimation(Motion.snappy) { action() } } label: {
+            HStack(spacing: 14) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(Theme.berry))
+                        .symbolEffect(.bounce, value: selected)
+                        .frame(width: 38, height: 38)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(selected ? AnyShapeStyle(Theme.berryGradient)
+                                               : AnyShapeStyle(Theme.berry.opacity(0.10)))
+                        }
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Text(title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
@@ -476,35 +554,31 @@ struct OptionRow: View {
                 }
                 Spacer(minLength: 8)
                 ZStack {
-                    Circle().strokeBorder(selected ? Theme.berry : Theme.ring, lineWidth: 2)
-                        .frame(width: 24, height: 24)
-                    if selected {
-                        Circle().fill(Theme.berry).frame(width: 24, height: 24)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
-                            .transition(.scale.combined(with: .opacity))
-                    }
+                    Circle().strokeBorder(Theme.ring, lineWidth: 1.6)
+                        .frame(width: 26, height: 26)
+                    if selected { CheckSeal() }
                 }
             }
-            .padding(.horizontal, 18).padding(.vertical, 15)
+            .padding(.horizontal, 16).padding(.vertical, 15)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(selected ? Theme.berry : Theme.ring, lineWidth: selected ? 1.8 : 1))
+            .glassCard(selected: selected, radius: 20)
+            .overlay { if selected { SelectionBorder(radius: 20, ns: selectionNS) } }
+            .scaleEffect(selected ? 1.02 : 1)
             .animation(Motion.snappy, value: selected)
         }
         .buttonStyle(PressableStyle())
     }
 }
 
-// MARK: - Length picker (duration rows + inline ruler for Custom)
+// MARK: - Length picker (2×2 duration tiles + Custom row with inline ruler)
 
-/// Shared by onboarding's LengthStep and Settings' DurationView. Descriptive duration
-/// rows replace any preset-pill row; Custom expands the ruler inline.
+/// Shared by onboarding's LengthStep and Settings' DurationView. A grid of big-numeral
+/// duration tiles plus a Custom row; one gradient border glides across the five choices.
 struct LengthPicker: View {
     @Binding var days: Int
     let startDate: Date
     @State private var customMode: Bool
+    @Namespace private var selNS
 
     static let presets: [(days: Int, note: String)] = [
         (7,  "a one-week spark"),
@@ -520,23 +594,29 @@ struct LengthPicker: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            ForEach(Self.presets, id: \.days) { p in
-                OptionRow(title: "\(p.days) days", note: p.note,
-                          badge: p.days == 75 ? "signature" : nil,
-                          selected: !customMode && days == p.days) {
-                    withAnimation(Motion.snappy) { customMode = false; days = p.days }
+        VStack(spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                      spacing: 12) {
+                ForEach(Self.presets, id: \.days) { p in
+                    DurationTile(days: p.days, note: p.note,
+                                 badge: p.days == 75 ? "signature" : nil,
+                                 selected: !customMode && days == p.days, ns: selNS) {
+                        customMode = false; days = p.days
+                    }
                 }
             }
-            OptionRow(title: "Custom", note: "you set the pace", selected: customMode) {
-                withAnimation(Motion.snappy) { customMode = true }
+            OptionRow(title: "Custom", note: "you set the pace", icon: "slider.horizontal.3",
+                      selectionNS: selNS, selected: customMode) {
+                customMode = true
             }
             if customMode {
                 RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.berry)
                     .padding(.top, 6)
-                    .transition(.opacity)
+                    .transition(.blurReplace)
             }
             Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 8)
+                .contentTransition(.numericText())
+                .animation(Motion.snappy, value: days)
         }
         .padding(.horizontal, 20)
         // The owner can set `days` after init (e.g. Settings loading the saved length):
@@ -549,6 +629,47 @@ struct LengthPicker: View {
     private var range: String {
         let end = Calendar.current.date(byAdding: .day, value: days - 1, to: startDate) ?? startDate
         return "\(startDate.formatted(.dateTime.month(.abbreviated).day())) to \(end.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+}
+
+/// One duration choice in the LengthPicker grid — a big serif numeral on porcelain glass,
+/// check seal in the corner, sharing the picker's traveling selection border.
+private struct DurationTile: View {
+    let days: Int
+    let note: String
+    var badge: String? = nil
+    let selected: Bool
+    var ns: Namespace.ID
+    var action: () -> Void
+
+    var body: some View {
+        Button { Haptics.select(); withAnimation(Motion.snappy) { action() } } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(days)").font(Font2.serif(36, .semibold)).foregroundStyle(Theme.ink)
+                    Text("days").font(Font2.sans(13, .bold)).foregroundStyle(Theme.ink.opacity(0.45))
+                }
+                Text(note).font(Font2.sans(12, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+                    .lineLimit(1).minimumScaleFactor(0.75)
+                if let badge {
+                    Text(badge.uppercased()).font(Font2.sans(8.5, .heavy)).tracking(1)
+                        .foregroundStyle(Theme.berry)
+                        .padding(.horizontal, 6).padding(.vertical, 2.5)
+                        .background(Theme.berry.opacity(0.12), in: Capsule())
+                        .padding(.top, 3)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 106, alignment: .topLeading)
+            .overlay(alignment: .topTrailing) {
+                if selected { CheckSeal(size: 22).padding(10) }
+            }
+            .glassCard(selected: selected, radius: 20)
+            .overlay { if selected { SelectionBorder(radius: 20, ns: ns) } }
+            .scaleEffect(selected ? 1.02 : 1)
+            .animation(Motion.snappy, value: selected)
+        }
+        .buttonStyle(PressableStyle())
     }
 }
 

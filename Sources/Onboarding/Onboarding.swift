@@ -101,13 +101,19 @@ struct OnboardingFlow: View {
         case 2:  NameStep(model: model, onNext: next)
         case 3:  QuizStep(lead: "What do you", accent: "want", trail: "most?",
                           options: ["Discipline", "Confidence", "More energy", "Peace of mind"],
-                          photo: "onb_q_want", greeting: hello, selection: bind(\.wantMost), onNext: next)
+                          photo: "onb_q_want",
+                          icons: ["flame.fill", "crown.fill", "bolt.fill", "leaf.fill"],
+                          greeting: hello, selection: bind(\.wantMost), onNext: next)
         case 4:  QuizStep(lead: "What's your", accent: "daily", trail: "vibe?",
                           options: ["Calm & slow", "Busy & driven", "Social & fun", "Quiet & focused"],
-                          photo: "onb_q_vibe", selection: bind(\.dailyVibe), onNext: next)
+                          photo: "onb_q_vibe",
+                          icons: ["cloud.fill", "hare.fill", "party.popper.fill", "moon.stars.fill"],
+                          selection: bind(\.dailyVibe), onNext: next)
         case 5:  QuizStep(lead: "What's the", accent: "hardest?", trail: nil,
                           options: ["Staying consistent", "Sugar cravings", "Enough sleep", "Screen time"],
-                          photo: "onb_q_hard", selection: bind(\.hardest), onNext: next)
+                          photo: "onb_q_hard",
+                          icons: ["arrow.clockwise", "birthday.cake.fill", "bed.double.fill", "iphone"],
+                          selection: bind(\.hardest), onNext: next)
         case 6:  AppPreviewStep(onNext: next)
         case 7:  ChooseChallengeStep(model: model, onNext: next)
         case 8:  ChallengeDetailStep(model: model, onNext: next)
@@ -169,8 +175,17 @@ private struct WelcomeStep: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
+            // The app mark, treated exactly like the splash icon so launch → welcome feels continuous.
+            Image("LaunchLogo")
+                .resizable().scaledToFit()
+                .frame(width: 68, height: 68)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.ink.opacity(0.06), lineWidth: 1))
+                .shadow(color: .black.opacity(0.10), radius: 14, y: 7)
+                .popIn(delay: 0.05, from: 0.8)
+                .padding(.bottom, 16)
             Text("75 HER").font(Font2.sans(13, .heavy)).tracking(7).foregroundStyle(Theme.ink.opacity(0.4))
-            DotCalendar().padding(.top, 30).padding(.horizontal, 40)
+            DotCalendar().padding(.top, 26).padding(.horizontal, 28)
             Spacer()
             VStack(spacing: 12) {
                 TypewriterHeadline(lead: "Show up for", accent: "yourself", size: 34, alignment: .center)
@@ -283,38 +298,44 @@ private struct FriendsPreviewStep: View {
 private struct FutureYouStep: View {
     var onNext: () -> Void
 
-    private let traits: [(icon: String, word: String)] = [
-        ("figure.strengthtraining.traditional", "strong"),
-        ("brain.head.profile", "clear"),
-        ("sparkles", "radiant"),
-        ("calendar.badge.checkmark", "consistent"),
+    /// The transformation, not a feature list — milestones on the way to day 75,
+    /// rising through a typographic crescendo and landing on the brand word.
+    private let milestones: [(day: String, word: String)] = [
+        ("DAY 10", "stronger"),
+        ("DAY 30", "clearer"),
+        ("DAY 50", "radiant"),
+        ("DAY 75", "her."),
     ]
 
     var body: some View {
         VStack(spacing: 0) {
             Group {
                 if AppImage.exists("onb_her") {
-                    PhotoFill(name: "onb_her").frame(height: 310)
+                    PhotoFill(name: "onb_her").frame(height: 280)
                 } else {
-                    Theme.espressoGradient.frame(height: 310)
+                    Theme.espressoGradient.frame(height: 280)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous)).padding(.horizontal, 24)
 
-            HStack(spacing: 10) {
-                ForEach(Array(traits.enumerated()), id: \.offset) { i, t in
-                    VStack(spacing: 6) {
-                        Image(systemName: t.icon)
-                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.berry)
-                        Text(t.word).font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
+            // The journey ledger — quiet day markers, each line a little larger than the last.
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(milestones.enumerated()), id: \.offset) { i, m in
+                    let final = i == milestones.count - 1
+                    HStack(alignment: .firstTextBaseline, spacing: 16) {
+                        Text(m.day)
+                            .font(Font2.sans(11, .heavy)).tracking(1.5)
+                            .foregroundStyle(final ? Theme.berry : Theme.ink.opacity(0.35))
+                            .frame(width: 56, alignment: .leading)
+                        Text(m.word)
+                            .font(Font2.serif(18 + CGFloat(i) * 1.7, final ? .semibold : .medium)).italic()
+                            .foregroundStyle(final ? Theme.berry : Theme.ink.opacity(0.8))
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.ring, lineWidth: 1))
                     .staggeredAppear(index: i)
                 }
             }
-            .padding(.horizontal, 24).padding(.top, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 40).padding(.top, 18)
 
             Spacer(minLength: 18)
             VStack(spacing: 6) {
@@ -364,9 +385,11 @@ private struct NameStep: View {
 private struct QuizStep: View {
     let lead: String; let accent: String; let trail: String?
     let options: [String]; let photo: String
+    var icons: [String] = []             // leading chips, zipped with options
     var greeting: String? = nil          // one-time warm eyebrow ("nice to meet you, …")
     @Binding var selection: String?
     var onNext: () -> Void
+    @Namespace private var selNS         // the gradient border travels between answers
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let greeting {
@@ -378,13 +401,17 @@ private struct QuizStep: View {
                 .padding(.horizontal, 24).padding(.top, 6)
             VStack(spacing: 10) {
                 ForEach(Array(options.enumerated()), id: \.element) { i, opt in
-                    OptionRow(title: opt, selected: selection == opt) { selection = opt }
+                    OptionRow(title: opt,
+                              icon: i < icons.count ? icons[i] : nil,
+                              selectionNS: selNS,
+                              selected: selection == opt) { selection = opt }
                         .staggeredAppear(index: i)
                 }
             }.padding(.horizontal, 20).padding(.top, 22)
             Spacer()
             if selection != nil, AppImage.exists(photo) {
-                PhotoFill(name: photo).frame(height: 200).frame(maxWidth: .infinity).clipped().transition(.opacity)
+                PhotoFill(name: photo).frame(height: 200).frame(maxWidth: .infinity).clipped()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             ctaPad(PrimaryButton(title: "Continue", action: onNext)
                 .disabled(selection == nil).opacity(selection == nil ? 0.5 : 1)).padding(.top, 12)
@@ -521,16 +548,32 @@ struct StartDateStep: View {
         VStack(spacing: 0) {
             TypewriterHeadline(lead: "Pick your", accent: "day one", size: 32, alignment: .center).padding(.top, 6)
             Spacer()
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(strip, id: \.self) { d in
-                        DayCard(date: d,
-                                selected: Calendar.current.isDate(d, inSameDayAs: model.startDate)) {
-                            withAnimation(Motion.snappy) { showPicker = false; model.startDate = d }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(strip, id: \.self) { d in
+                            DayCard(date: d,
+                                    selected: Calendar.current.isDate(d, inSameDayAs: model.startDate)) {
+                                withAnimation(Motion.snappy) { showPicker = false; model.startDate = d }
+                                withAnimation(Motion.gentle) { proxy.scrollTo(d, anchor: .center) }
+                            }
+                            .id(d)
+                            .scrollTransition(.interactive) { view, phase in
+                                view.scaleEffect(phase.isIdentity ? 1 : 0.9)
+                                    .opacity(phase.isIdentity ? 1 : 0.7)
+                            }
                         }
                     }
+                    .scrollTargetLayout()
+                    .padding(.vertical, 14)     // headroom for the selected card's lift + glow
                 }
-                .padding(.horizontal, 20).padding(.vertical, 8)
+                .contentMargins(.horizontal, 20, for: .scrollContent)
+                .scrollTargetBehavior(.viewAligned)
+                .onAppear {
+                    if let sel = strip.first(where: { Calendar.current.isDate($0, inSameDayAs: model.startDate) }) {
+                        proxy.scrollTo(sel, anchor: .center)
+                    }
+                }
             }
             Text("Starting \(model.startDate.formatted(.dateTime.weekday(.wide).month(.wide).day()))")
                 .font(Font2.sans(13, .bold)).foregroundStyle(Theme.ink.opacity(0.5))
@@ -577,12 +620,27 @@ private struct DayCard: View {
                     .font(Font2.sans(11, .medium))
                     .foregroundStyle(selected ? .white.opacity(0.75) : Theme.ink.opacity(0.45))
             }
-            .frame(width: 62).padding(.vertical, 13)
-            .background(selected ? AnyShapeStyle(Theme.berry) : AnyShapeStyle(Color.white),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(selected ? Theme.berry : Theme.ring, lineWidth: 1))
-            .animation(Motion.snappy, value: selected)
+            .frame(width: 64).padding(.vertical, 14)
+            .background {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.white.opacity(0.55)))
+                    .opacity(selected ? 0 : 1)
+                if selected {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.berryGradient)
+                }
+            }
+            .overlay {
+                if !selected {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.ring, lineWidth: 1)
+                }
+            }
+            .shadow(color: selected ? Theme.berry.opacity(0.32) : .black.opacity(0.05),
+                    radius: selected ? 14 : 10, y: selected ? 7 : 4)
+            .scaleEffect(selected ? 1.06 : 1)
+            .offset(y: selected ? -4 : 0)
+            .animation(Motion.bouncy, value: selected)
         }
         .buttonStyle(PressableStyle())
     }
