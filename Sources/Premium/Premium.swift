@@ -39,6 +39,13 @@ final class Premium {
     private(set) var plans: [Plan] = []
     private(set) var plansError: String?
 
+    /// The quick-action deal — the "discount" offering's yearly plan (falls back to the
+    /// default yearly if that offering isn't live). `dealAnchor` is the regular yearly
+    /// price the deal undercuts, shown struck through; nil when there's no real discount.
+    private(set) var deal: Plan?
+    private(set) var dealAnchor: String?
+    private(set) var dealError: String?
+
     var isPremium: Bool { status == .premium }
 
     private init() {}
@@ -86,6 +93,39 @@ final class Premium {
         } catch {
             plans = []
             plansError = "Couldn't load plans. Check your connection and try again."
+        }
+    }
+
+    func loadDeal() async {
+        dealError = nil
+        do {
+            let offerings = try await Purchases.shared.offerings()
+            let regular = (offerings.current ?? offerings.offering(identifier: "default"))?.annual
+            if let o = offerings.offering(identifier: "discount"),
+               let pkg = o.annual ?? o.availablePackages.first {
+                var badge: String?
+                if let r = regular?.storeProduct.price, r > 0 {
+                    let saved = 1 - (pkg.storeProduct.price as NSDecimalNumber).doubleValue / (r as NSDecimalNumber).doubleValue
+                    let pct = Int((saved * 100).rounded())
+                    if pct >= 1 { badge = "\(pct)% OFF" }
+                }
+                deal = Plan(id: pkg.identifier, title: "Yearly",
+                            price: pkg.storeProduct.localizedPriceString + "/year",
+                            badge: badge, package: pkg)
+                dealAnchor = badge != nil ? regular.map { $0.storeProduct.localizedPriceString + "/year" } : nil
+            } else if let pkg = regular {
+                // Discount offering not live — the regular yearly still beats renewals.
+                deal = Plan(id: pkg.identifier, title: "Yearly",
+                            price: pkg.storeProduct.localizedPriceString + "/year",
+                            badge: nil, package: pkg)
+                dealAnchor = nil
+            } else {
+                deal = nil
+                dealError = "The deal isn't available right now. Check back in a moment."
+            }
+        } catch {
+            deal = nil
+            dealError = "Couldn't load the deal. Check your connection and try again."
         }
     }
 

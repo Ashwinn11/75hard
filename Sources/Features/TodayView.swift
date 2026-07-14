@@ -371,8 +371,8 @@ struct DayCelebration: View {
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity).padding(.vertical, 17)
-        .background(Theme.olive, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
-        .shadow(color: Theme.olive.opacity(0.30), radius: 10, x: 0, y: 5)
+        .background(Theme.berry, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
+        .shadow(color: Theme.berry.opacity(0.30), radius: 10, x: 0, y: 5)
     }
 
     /// Render the sticker to a standalone image (on paper) for sharing / saving to Photos.

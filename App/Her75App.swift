@@ -3,6 +3,9 @@ import SwiftData
 
 @main
 struct Her75App: App {
+    // Installs the scene delegate that receives home-screen quick-action taps.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     private let container = Persistence.shared
 
     init() {
@@ -15,6 +18,11 @@ struct Her75App: App {
                 .tint(Theme.rose)
         }
         .modelContainer(container)
+        // Rebuild the icon's long-press menu as the app backgrounds — the last write
+        // before the user can long-press decides whether the deal row exists.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { QuickActions.refresh() }
+        }
     }
 }
 

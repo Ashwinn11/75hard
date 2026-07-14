@@ -34,7 +34,7 @@ struct PaywallView: View {
     private var ctaTitle: String {
         if busy { return "One sec…" }
         guard let p = selected else { return "Start the journey" }
-        return ctaFlip ? "Start for \(p.price)" : "Become her"
+        return ctaFlip ? "Start for \(p.price)" : "I'm all in"
     }
 
     var body: some View {
@@ -43,18 +43,18 @@ struct PaywallView: View {
             VStack(spacing: 20) {
                 SocialProofCluster()
                 VStack(spacing: 2) {
-                    Text("Become Her in \(days) days")
+                    Text("All \(days) days. All in.")
                         .font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
-                    Text("Everything unlocked, every day")
+                    Text("Every feature, from day one")
                         .font(Font2.serif(26, .semibold)).foregroundStyle(Theme.ink)
                 }
                 .multilineTextAlignment(.center)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(["Become the woman who follows through",
-                             "End each day proud you showed up",
-                             "Watch yourself transform, day by day",
-                             "Rise with women who won't let you quit"], id: \.self) { b in
+                    ForEach(["Every challenge, fully unlocked",
+                             "Daily tracking, photos & streaks",
+                             "Friends who keep you showing up",
+                             "Widgets & gentle reminders"], id: \.self) { b in
                         Label(b, systemImage: "checkmark.circle.fill")
                             .font(Font2.sans(14, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
                     }
@@ -67,7 +67,7 @@ struct PaywallView: View {
             VStack(spacing: 14) {
                 plansSection.padding(.horizontal, 22)
                 ctaPad(VStack(spacing: 10) {
-                    PrimaryButton(title: ctaTitle, color: Theme.mauve) { buy() }
+                    PrimaryButton(title: ctaTitle) { buy() }
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.45), value: ctaTitle)
                         .onReceive(ctaTimer) { _ in if !busy { ctaFlip.toggle() } }

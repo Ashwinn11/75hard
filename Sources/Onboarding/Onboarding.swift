@@ -23,6 +23,23 @@ final class OnboardingModel {
         track == .custom && !customName.isEmpty ? customName : track.title
     }
 
+    /// The catalog track that best matches the quiz answers — pinned first on the
+    /// choose-challenge step. A specific pain beats a general want beats the vibe.
+    var recommendedTrack: ChallengeTrack {
+        switch hardest {
+        case "Sugar cravings": return .sugarFree
+        case "Screen time":    return .mentalWellness
+        case "Enough sleep":   return .glowUp
+        default: break
+        }
+        switch wantMost {
+        case "Peace of mind": return .mentalWellness
+        case "More energy":   return .betterMe
+        default: break
+        }
+        return dailyVibe == "Calm & slow" ? .soft : .her75
+    }
+
     func pick(_ t: ChallengeTrack) {
         track = t; trackPicked = true
         lengthDays = t.defaultDays
@@ -57,15 +74,17 @@ struct OnboardingFlow: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            if step >= 1 && step != loadingStep && step != last {   // loading + paywall own their nav
+            // Loading + paywall own their nav. Ready (15) sits past the loader, so back
+            // from it could only replay the loader — hidden there too.
+            if step >= 1 && ![loadingStep, 15, last].contains(step) {
                 Button { back() } label: {
                     Image(systemName: "chevron.left").font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Theme.ink).frame(width: 38, height: 38)
                         .background(Color.white, in: Circle()).overlay(Circle().stroke(Theme.ring, lineWidth: 1))
                 }
             }
-            if (5...11).contains(step) {        // quiz → length: setup progress
-                ProgressBarThin(value: Double(step - 4) / 7.0, track: Theme.ring, fill: Theme.ink, height: 6)
+            if (3...10).contains(step) {        // quiz → length: setup progress
+                ProgressBarThin(value: Double(step - 2) / 8.0, track: Theme.ring, fill: Theme.ink, height: 6)
                     .frame(maxWidth: 170)
                     .animation(Motion.gentle, value: step)
             }
@@ -78,31 +97,37 @@ struct OnboardingFlow: View {
     @ViewBuilder private var stepView: some View {
         switch step {
         case 0:  WelcomeStep(onNext: next)
-        case 1:  AppPreviewStep(model: model, onNext: next)
-        case 2:  FriendsPreviewStep(onNext: next)
-        case 3:  ChipsStep(onNext: next)
-        case 4:  NameStep(model: model, onNext: next)
-        case 5:  QuizStep(lead: "What do you", accent: "want", trail: "most?",
+        case 1:  FutureYouStep(onNext: next)
+        case 2:  NameStep(model: model, onNext: next)
+        case 3:  QuizStep(lead: "What do you", accent: "want", trail: "most?",
                           options: ["Discipline", "Confidence", "More energy", "Peace of mind"],
-                          photo: "onb_q_want", color: Theme.sand, selection: bind(\.wantMost), onNext: next)
-        case 6:  QuizStep(lead: "What's your", accent: "daily", trail: "vibe?",
+                          photo: "onb_q_want", greeting: hello, selection: bind(\.wantMost), onNext: next)
+        case 4:  QuizStep(lead: "What's your", accent: "daily", trail: "vibe?",
                           options: ["Calm & slow", "Busy & driven", "Social & fun", "Quiet & focused"],
-                          photo: "onb_q_vibe", color: Theme.clay, selection: bind(\.dailyVibe), onNext: next)
-        case 7:  QuizStep(lead: "What's the", accent: "hardest?", trail: nil,
+                          photo: "onb_q_vibe", selection: bind(\.dailyVibe), onNext: next)
+        case 5:  QuizStep(lead: "What's the", accent: "hardest?", trail: nil,
                           options: ["Staying consistent", "Sugar cravings", "Enough sleep", "Screen time"],
-                          photo: "onb_q_hard", color: Theme.mist, selection: bind(\.hardest), onNext: next)
-        case 8:  ChooseChallengeStep(model: model, onNext: next)
-        case 9:  ChallengeDetailStep(model: model, onNext: next)
-        case 10: StartDateStep(model: model, onNext: next)
-        case 11: LengthStep(model: model, onNext: next)
+                          photo: "onb_q_hard", selection: bind(\.hardest), onNext: next)
+        case 6:  AppPreviewStep(onNext: next)
+        case 7:  ChooseChallengeStep(model: model, onNext: next)
+        case 8:  ChallengeDetailStep(model: model, onNext: next)
+        case 9:  StartDateStep(model: model, onNext: next)
+        case 10: LengthStep(model: model, onNext: next)
+        case 11: FriendsPreviewStep(onNext: next)
         case 12: PartnerUpStep(onPartner: next, onSolo: { skip(to: loadingStep) })
         case 13: InviteTicketStep(model: model, onNext: next)
-        case 14: LoadingStep(onNext: next)
+        case 14: LoadingStep(model: model, onNext: next)
         case 15: ReadyStep(model: model, onNext: next)
-        case 16: SignPromiseStep(onNext: next)
+        case 16: SignPromiseStep(model: model, onNext: next)
         default: PaywallView(days: model.lengthDays, onUnlocked: finish,
                              onClose: { skip(to: 15) })   // Close → the plan preview (ReadyStep)
         }
+    }
+
+    /// The warm eyebrow on the first quiz step, once we know their name.
+    private var hello: String? {
+        let n = model.name.trimmingCharacters(in: .whitespaces)
+        return n.isEmpty ? nil : "nice to meet you, \(n)"
     }
 
     private func bind(_ key: ReferenceWritableKeyPath<OnboardingModel, String?>) -> Binding<String?> {
@@ -131,72 +156,50 @@ struct OnboardingFlow: View {
     }
 }
 
-// CTA buttons are ~75% of the screen width (per the reference), centered.
+// CTA buttons span the full width with comfortable margins, anchored at the bottom.
 // Internal: PaywallView (Sources/Premium) shares this bottom-CTA layout.
 func ctaPad<V: View>(_ v: V) -> some View {
-    HStack(spacing: 0) {
-        Spacer(minLength: 0)
-        v.containerRelativeFrame(.horizontal) { w, _ in w * 0.75 }
-        Spacer(minLength: 0)
-    }
-    .padding(.bottom, 22)
+    v.padding(.horizontal, 20).padding(.bottom, 22)
 }
 
-/// The rounded bottom card that holds the headline + CTA on the early onboarding screens.
-private struct OnbBottomCard<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-    var body: some View {
-        VStack(spacing: 16) { content() }
-            .padding(22)
-            .frame(maxWidth: .infinity)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-            .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10)
-            .padding(.horizontal, 16).padding(.bottom, 18)
-    }
-}
-
-// MARK: - 0 Welcome
+// MARK: - 0 Welcome (typographic hero — the 75 days themselves are the visual)
 
 private struct WelcomeStep: View {
     var onNext: () -> Void
     var body: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .top) {
-                PhotoMarquee().frame(height: 360).clipped()
-                FloatingPill {
-                    Text("loved by thousands of women").font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
-                }
-                .padding(.top, 6)
-                .popIn(delay: 0.5)
-            }
             Spacer()
-            OnbBottomCard {
-                TypewriterHeadline(lead: "Become her,", accent: "gently", size: 28, accentColor: Theme.rose, alignment: .center)
-                PrimaryButton(title: "Let's do this", action: onNext)
+            Text("75 HER").font(Font2.sans(13, .heavy)).tracking(7).foregroundStyle(Theme.ink.opacity(0.4))
+            DotCalendar().padding(.top, 30).padding(.horizontal, 40)
+            Spacer()
+            VStack(spacing: 12) {
+                TypewriterHeadline(lead: "Show up for", accent: "yourself", size: 34, alignment: .center)
+                Text("One challenge. 75 days. A new rhythm.")
+                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.textSecondary)
             }
+            .padding(.horizontal, 28)
+            ctaPad(PrimaryButton(title: "Start my 75", action: onNext)).padding(.top, 26)
         }
     }
 }
 
-// MARK: - 1 App preview
+// MARK: - 6 App preview (the breather bridging the quiz into setup)
 
 private struct AppPreviewStep: View {
-    @Bindable var model: OnboardingModel
     var onNext: () -> Void
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
             AppScreenshot().popIn(delay: 0.15, from: 0.88)
             Spacer()
-            OnbBottomCard {
-                TypewriterHeadline(lead: "Welcome to your next", accent: "75 days", size: 28, accentColor: Theme.clay, alignment: .center)
-                PrimaryButton(title: "Continue", color: Theme.mist, action: onNext)
-            }
+            TypewriterHeadline(lead: "Your new daily", accent: "home", size: 30, alignment: .center)
+                .padding(.horizontal, 28)
+            ctaPad(PrimaryButton(title: "Set mine up", action: onNext)).padding(.top, 20)
         }
     }
 }
 
-// MARK: - 2 Friends preview
+// MARK: - 11 Friends preview (the social demo right before the partner ask)
 
 private struct FriendsPreviewStep: View {
     var onNext: () -> Void
@@ -242,7 +245,7 @@ private struct FriendsPreviewStep: View {
                 ForEach(Array(peeks.enumerated()), id: \.element.id) { i, f in
                     FriendRow(
                         friend: f,
-                        accent: Theme.olive,
+                        accent: Theme.berry,
                         tickedCount: tickedCount[i],
                         bumpID: bumpID[i]
                     )
@@ -253,10 +256,9 @@ private struct FriendsPreviewStep: View {
             }
             .padding(.horizontal, 30)
             Spacer()
-            OnbBottomCard {
-                TypewriterHeadline(lead: "Follow your", accent: "friends", size: 32, accentColor: Theme.olive, alignment: .center)
-                PrimaryButton(title: "Continue", color: Theme.olive, action: onNext)
-            }
+            TypewriterHeadline(lead: "Follow your", accent: "friends", size: 32, alignment: .center)
+                .padding(.horizontal, 28)
+            ctaPad(PrimaryButton(title: "Continue", action: onNext)).padding(.top, 20)
         }
         .onAppear { scheduleTicks() }
     }
@@ -276,38 +278,57 @@ private struct FriendsPreviewStep: View {
     }
 }
 
-// MARK: - 3 Chips
+// MARK: - 1 Future you (trait tiles UNDER the photo — nothing overlaps the image)
 
-private struct ChipsStep: View {
+private struct FutureYouStep: View {
     var onNext: () -> Void
+
+    private let traits: [(icon: String, word: String)] = [
+        ("figure.strengthtraining.traditional", "strong"),
+        ("brain.head.profile", "clear"),
+        ("sparkles", "radiant"),
+        ("calendar.badge.checkmark", "consistent"),
+    ]
+
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                Group {
-                    if AppImage.exists("onb_her") {
-                        PhotoFill(name: "onb_her").frame(height: 380)
-                    } else {
-                        Theme.espressoGradient.frame(height: 380)
+            Group {
+                if AppImage.exists("onb_her") {
+                    PhotoFill(name: "onb_her").frame(height: 310)
+                } else {
+                    Theme.espressoGradient.frame(height: 310)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous)).padding(.horizontal, 24)
+
+            HStack(spacing: 10) {
+                ForEach(Array(traits.enumerated()), id: \.offset) { i, t in
+                    VStack(spacing: 6) {
+                        Image(systemName: t.icon)
+                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.berry)
+                        Text(t.word).font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink)
                     }
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.ring, lineWidth: 1))
+                    .staggeredAppear(index: i)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous)).padding(.horizontal, 30)
-                AnimatedChips(items: [("heart.fill", "healthy"), ("bolt.fill", "fit"),
-                                      ("sparkles", "glowing"), ("scope", "focused"), ("leaf.fill", "calm")])
-                    .padding(.horizontal, 30)   // match the photo bounds so chips hug its corners
             }
+            .padding(.horizontal, 24).padding(.top, 14)
+
             Spacer(minLength: 18)
-            OnbBottomCard {
-                VStack(spacing: 2) {
-                    TypewriterHeadline(lead: "Become Her", size: 36, alignment: .center)
-                    Text("(in 75 days)").font(Font2.serif(22, .medium)).italic().foregroundStyle(Theme.clay)
-                }
-                PrimaryButton(title: "I'm ready", color: Theme.olive, action: onNext)
+            VStack(spacing: 6) {
+                TypewriterHeadline(lead: "Meet the", accent: "future you", size: 32, alignment: .center)
+                Text("built one day at a time")
+                    .font(Font2.serif(20, .medium)).italic().foregroundStyle(Theme.textSecondary)
             }
+            .padding(.horizontal, 28)
+            ctaPad(PrimaryButton(title: "I'm ready", action: onNext)).padding(.top, 18)
         }
     }
 }
 
-// MARK: - 4 Name
+// MARK: - 2 Name
 
 private struct NameStep: View {
     @Bindable var model: OnboardingModel
@@ -316,87 +337,116 @@ private struct NameStep: View {
     private var empty: Bool { model.name.trimmingCharacters(in: .whitespaces).isEmpty }
     var body: some View {
         VStack(spacing: 0) {
-            TypewriterHeadline(lead: "What's your", accent: "name?", size: 34, accentColor: Theme.rose, alignment: .center)
+            TypewriterHeadline(lead: "What's your", accent: "name?", size: 34, alignment: .center)
                 .padding(.top, 10).padding(.horizontal, 24)
             TextField("First name", text: $model.name)
                 .font(Font2.serif(28, .medium)).multilineTextAlignment(.center)
                 .focused($focused).textInputAutocapitalization(.words).padding(.top, 28)
+                .submitLabel(.continue)
+                .onSubmit { if !empty { focused = false; onNext() } }
             // The signature line draws itself out as the keyboard arrives.
-            Rectangle().fill(focused ? Theme.mauve.opacity(0.6) : Theme.ring)
+            Rectangle().fill(focused ? Theme.berry.opacity(0.6) : Theme.ring)
                 .frame(width: focused ? 220 : 70, height: 1.5).padding(.top, 6)
                 .animation(Motion.gentle, value: focused)
             Spacer()
             if AppImage.exists("onb_name") {
                 PhotoFill(name: "onb_name").frame(height: 220).frame(maxWidth: .infinity).clipped()
             }
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.mauve, action: { focused = false; onNext() })
+            ctaPad(PrimaryButton(title: "Continue", action: { focused = false; onNext() })
                 .disabled(empty).opacity(empty ? 0.5 : 1)).padding(.top, 12)
         }
         .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { focused = true } }
     }
 }
 
-// MARK: - 5–7 Quiz
+// MARK: - 3–5 Quiz (full-width option cards, radio-check selection)
 
 private struct QuizStep: View {
     let lead: String; let accent: String; let trail: String?
     let options: [String]; let photo: String
-    var color: Color = Theme.mauve
+    var greeting: String? = nil          // one-time warm eyebrow ("nice to meet you, …")
     @Binding var selection: String?
     var onNext: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let greeting {
+                Text(greeting)
+                    .font(Font2.serif(16, .medium)).italic().foregroundStyle(Theme.berry)
+                    .padding(.horizontal, 24).padding(.top, 6)
+            }
             TypewriterHeadline(lead: lead, accent: accent, trail: trail, size: 32, accentColor: Theme.ink, accentItalic: false)
                 .padding(.horizontal, 24).padding(.top, 6)
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 10) {
                 ForEach(Array(options.enumerated()), id: \.element) { i, opt in
-                    OptionPill(text: opt, selected: selection == opt) { selection = opt }
+                    OptionRow(title: opt, selected: selection == opt) { selection = opt }
                         .staggeredAppear(index: i)
                 }
-            }.padding(.horizontal, 24).padding(.top, 22)
+            }.padding(.horizontal, 20).padding(.top, 22)
             Spacer()
             if selection != nil, AppImage.exists(photo) {
                 PhotoFill(name: photo).frame(height: 200).frame(maxWidth: .infinity).clipped().transition(.opacity)
             }
-            ctaPad(PrimaryButton(title: "Continue", color: color, action: onNext)
+            ctaPad(PrimaryButton(title: "Continue", action: onNext)
                 .disabled(selection == nil).opacity(selection == nil ? 0.5 : 1)).padding(.top, 12)
         }
         .animation(Motion.gentle, value: selection)
     }
 }
 
-// MARK: - 7 Choose challenge (scrollable library)
+// MARK: - 7 Choose challenge (recommended-first library, quiz-personalized)
 
 private struct ChooseChallengeStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
 
+    private var picked: ChallengeTrack { model.recommendedTrack }
+    private var rest: [ChallengeTrack] { ChallengeTrack.catalog.filter { $0 != picked } }
+
     var body: some View {
         VStack(spacing: 0) {
             TypewriterHeadline(lead: "Choose your", accent: "challenge", size: 34, accentColor: Theme.ink, alignment: .center)
                 .padding(.top, 6)
-            HStack(spacing: 28) {                              // Popular / Custom tabs
-                VStack(spacing: 6) {
-                    Text("Popular").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
-                    Rectangle().fill(Theme.ink).frame(width: 64, height: 2.5)
-                }
-                Button { Haptics.select(); model.pick(.custom); onNext() } label: {   // Custom → custom detail
-                    VStack(spacing: 6) {
-                        Text("Custom").font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink.opacity(0.35))
-                        Rectangle().fill(.clear).frame(width: 64, height: 2.5)
-                    }
-                }.buttonStyle(.plain)
-            }.padding(.top, 14)
+            Text("shaped by your answers")
+                .font(Font2.serif(16, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.5))
+                .padding(.top, 4)
             ScrollView {
                 VStack(spacing: 24) {
-                    ForEach(Array(ChallengeTrack.catalog.enumerated()), id: \.element.id) { i, t in
+                    Button { Haptics.select(); model.pick(picked); onNext() } label: {
+                        ChallengeStripCard(track: picked, pillText: "picked for you", pillIcon: "sparkles")
+                    }
+                    .buttonStyle(PressableStyle())
+                    .staggeredAppear(index: 0)
+
+                    HStack(spacing: 12) {
+                        Rectangle().fill(Theme.ring).frame(height: 1)
+                        Text("MORE CHALLENGES").font(Font2.sans(10, .heavy)).tracking(2)
+                            .foregroundStyle(Theme.ink.opacity(0.35)).fixedSize()
+                        Rectangle().fill(Theme.ring).frame(height: 1)
+                    }
+                    .staggeredAppear(index: 1)
+
+                    ForEach(Array(rest.enumerated()), id: \.element.id) { i, t in
                         Button { Haptics.select(); model.pick(t); onNext() } label: { ChallengeStripCard(track: t) }
                             .buttonStyle(PressableStyle())
-                            .staggeredAppear(index: i)
+                            .staggeredAppear(index: i + 2)
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 24)
             }
+            // Pinned under the list — the custom path (replaces the old Popular/Custom tabs).
+            Button { Haptics.select(); model.pick(.custom); onNext() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus").font(.system(size: 14, weight: .bold))
+                    Text("Build your own").font(Font2.sans(15, .bold))
+                }
+                .foregroundStyle(Theme.ink.opacity(0.65))
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Theme.ink.opacity(0.28), style: StrokeStyle(lineWidth: 1.4, dash: [6, 5])))
+            }
+            .buttonStyle(PressableStyle())
+            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 14)
         }
     }
 }
@@ -434,7 +484,7 @@ struct ChallengeDetailStep: View {
                 TaskListEditor(track: model.track,
                                items: model.habitDrafts.map { ($0.title, $0.color) },
                                onAdd: addTask, onEdit: { editing = $0 })
-                ctaPad(PrimaryButton(title: "Continue", color: Theme.olive, action: onNext))
+                ctaPad(PrimaryButton(title: "Continue", action: onNext))
                     .padding(.top, 8)
             }
             .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
@@ -454,50 +504,91 @@ struct ChallengeDetailStep: View {
 
 }
 
-// MARK: - 10 Start date
+// MARK: - 9 Start date (a strip of day cards — tap any of the next two weeks)
 
 struct StartDateStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
-    @State private var mode = 0
-    @Namespace private var pillNS
+    @State private var showPicker = false
+
+    private var strip: [Date] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        return (0..<14).compactMap { cal.date(byAdding: .day, value: $0, to: today) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            TypewriterHeadline(lead: "When do we", accent: "begin?", size: 32, accentColor: Theme.rose, alignment: .center).padding(.top, 6)
+            TypewriterHeadline(lead: "Pick your", accent: "day one", size: 32, alignment: .center).padding(.top, 6)
             Spacer()
-            Text(bigWord).font(Font2.sans(64, .heavy)).foregroundStyle(Theme.ink).contentTransition(.numericText())
-                .animation(Motion.snappy, value: mode)
-            HStack(spacing: 10) {
-                ForEach(Array(["Today", "Tomorrow", "Custom"].enumerated()), id: \.offset) { i, t in
-                    SelectPill(text: t, selected: mode == i, hPad: 20, vPad: 12, slide: ("start", pillNS)) {
-                        withAnimation(Motion.snappy) { mode = i }; apply(i)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(strip, id: \.self) { d in
+                        DayCard(date: d,
+                                selected: Calendar.current.isDate(d, inSameDayAs: model.startDate)) {
+                            withAnimation(Motion.snappy) { showPicker = false; model.startDate = d }
+                        }
                     }
                 }
-            }.padding(.top, 22)
-            if mode == 2 {
+                .padding(.horizontal, 20).padding(.vertical, 8)
+            }
+            Text("Starting \(model.startDate.formatted(.dateTime.weekday(.wide).month(.wide).day()))")
+                .font(Font2.sans(13, .bold)).foregroundStyle(Theme.ink.opacity(0.5))
+                .contentTransition(.numericText())
+                .animation(Motion.snappy, value: model.startDate)
+                .padding(.top, 16)
+            Button {
+                Haptics.tap()
+                withAnimation(Motion.gentle) { showPicker.toggle() }
+            } label: {
+                Text(showPicker ? "Back to quick picks" : "Need a later date?")
+                    .font(Font2.sans(13, .bold)).foregroundStyle(Theme.berry).underline()
+            }
+            .padding(.top, 10)
+            if showPicker {
                 DatePicker("", selection: $model.startDate, in: Date()..., displayedComponents: .date)
-                    .datePickerStyle(.compact).labelsHidden().tint(Theme.rose).padding(.top, 16)
-            } else {
-                Text(model.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
-                    .font(Font2.sans(13, .bold)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 12)
+                    .datePickerStyle(.compact).labelsHidden().tint(Theme.berry).padding(.top, 12)
+                    .transition(.opacity)
             }
             Spacer()
-            ctaPad(PrimaryButton(title: "Continue", color: Theme.mauve, action: onNext))
+            ctaPad(PrimaryButton(title: "Continue", action: onNext))
         }
-        .onAppear { apply(0) }
-    }
-    private var bigWord: String {
-        switch mode { case 0: return "today"; case 1: return "tomorrow"
-        default: return model.startDate.formatted(.dateTime.month(.abbreviated).day()) }
-    }
-    private func apply(_ i: Int) {
-        let cal = Calendar.current
-        if i == 0 { model.startDate = cal.startOfDay(for: Date()) }
-        else if i == 1 { model.startDate = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: Date()))! }
     }
 }
 
-// MARK: - 11 Length
+/// One tappable day in the start-date strip: weekday, big day number, month.
+private struct DayCard: View {
+    let date: Date
+    let selected: Bool
+    var action: () -> Void
+
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
+
+    var body: some View {
+        Button { Haptics.select(); action() } label: {
+            VStack(spacing: 5) {
+                Text(isToday ? "TODAY" : date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                    .font(Font2.sans(10, .heavy)).tracking(1)
+                    .foregroundStyle(selected ? .white.opacity(0.75) : Theme.ink.opacity(0.45))
+                Text(date.formatted(.dateTime.day()))
+                    .font(Font2.sans(26, .heavy))
+                    .foregroundStyle(selected ? .white : Theme.ink)
+                Text(date.formatted(.dateTime.month(.abbreviated)).lowercased())
+                    .font(Font2.sans(11, .medium))
+                    .foregroundStyle(selected ? .white.opacity(0.75) : Theme.ink.opacity(0.45))
+            }
+            .frame(width: 62).padding(.vertical, 13)
+            .background(selected ? AnyShapeStyle(Theme.berry) : AnyShapeStyle(Color.white),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(selected ? Theme.berry : Theme.ring, lineWidth: 1))
+            .animation(Motion.snappy, value: selected)
+        }
+        .buttonStyle(PressableStyle())
+    }
+}
+
+// MARK: - 10 Length
 
 struct LengthStep: View {
     @Bindable var model: OnboardingModel
@@ -506,15 +597,16 @@ struct LengthStep: View {
     var onNext: () -> Void
     var body: some View {
         VStack(spacing: 0) {
-            TypewriterHeadline(lead: "How long is your", accent: "challenge?", size: 30, accentColor: Theme.rose, alignment: .center).padding(.top, 6)
-            Spacer()
-            LengthPicker(days: $model.lengthDays, startDate: model.startDate)
-            Spacer()
+            TypewriterHeadline(lead: "How long is your", accent: "challenge?", size: 30, alignment: .center).padding(.top, 6)
+            ScrollView {
+                LengthPicker(days: $model.lengthDays, startDate: model.startDate)
+                    .padding(.top, 22).padding(.bottom, 12)
+            }
             if let footnote {
                 Text(footnote).font(Font2.sans(12, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
                     .multilineTextAlignment(.center).padding(.horizontal, 40).padding(.bottom, 10)
             }
-            ctaPad(PrimaryButton(title: ctaTitle, color: Theme.sand, action: onNext))
+            ctaPad(PrimaryButton(title: ctaTitle, action: onNext))
         }
     }
 }
@@ -532,7 +624,7 @@ private struct PartnerUpStep: View {
                     PhotoFill(name: "onb_together", anchor: UnitPoint(x: 0.5, y: 0.75))   // lower-middle: the two women, raised off the very bottom
                 } else {
                     ZStack {
-                        LinearGradient(colors: [Theme.olive.opacity(0.55), Theme.olive],
+                        LinearGradient(colors: [Theme.plum.opacity(0.55), Theme.plum],
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
                         Image(systemName: "person.2.fill").font(.system(size: 56, weight: .light)).foregroundStyle(.white)
                     }
@@ -540,7 +632,7 @@ private struct PartnerUpStep: View {
             }
             .frame(height: 220).frame(maxWidth: .infinity).clipped()
 
-            TypewriterHeadline(lead: "Do it", accent: "together", size: 34, accentColor: Theme.rose, alignment: .center).padding(.top, 8)
+            TypewriterHeadline(lead: "Do it", accent: "together", size: 34, alignment: .center).padding(.top, 8)
             Text("Add your friends, see their progress, and keep each other accountable through the challenge.")
                 .font(Font2.sans(14, .medium)).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center).padding(.horizontal, 36).padding(.top, 8)
@@ -552,11 +644,11 @@ private struct PartnerUpStep: View {
                 .popIn(delay: 0.4)
             Spacer()
             HStack(spacing: 10) {
-                PrimaryButton(title: "Partner Up", icon: "person.badge.plus", color: Theme.clay, action: onPartner)
+                PrimaryButton(title: "Partner Up", icon: "person.badge.plus", action: onPartner)
                 Button { Haptics.tap(); onSolo() } label: {
                     Text("I prefer solo").font(Font2.sans(16, .bold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 17)
-                        .background(Theme.ink, in: Capsule())
+                        .background(Theme.ink, in: RoundedRectangle(cornerRadius: Theme.pillRadius, style: .continuous))
                 }
                 .buttonStyle(PressableStyle())
             }
@@ -596,7 +688,7 @@ private struct InviteTicketStep: View {
                 .popIn(delay: 0.2, from: 0.92)
             Spacer()
             HStack(spacing: 12) {
-                PrimaryButton(title: "Continue", color: Theme.mist, action: onNext)
+                PrimaryButton(title: "Continue", action: onNext)
                 ShareLink(item: shareText) {
                     HStack(spacing: 8) {
                         Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .bold))
@@ -617,21 +709,32 @@ private struct InviteTicketStep: View {
     }
 }
 
-// MARK: - 13 Loading
+// MARK: - 14 Loading
 
 private struct LoadingStep: View {
+    var model: OnboardingModel
     var onNext: () -> Void
-    @State private var idx = 0
     @State private var rotate = false
     @State private var done = false
-    private let lines = ["Saving your daily mission…", "Pinning your start date…", "Almost ready…"]
+
+    /// The build-up reads their own answers back while the plan "assembles" —
+    /// the quiz pays off here instead of three generic lines.
+    private var lines: [String] {
+        var l = ["Reading your answers…"]
+        if let w = model.wantMost { l.append("Anchoring on \(w.lowercased())…") }
+        if let h = model.hardest  { l.append("Planning around \(h.lowercased())…") }
+        l.append("Shaping your \(model.lengthDays) days…")
+        return l
+    }
+    private let firstRow = 0.35, rowGap = 0.62
+
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 34) {
             Spacer()
             ZStack {
                 Circle().stroke(Theme.ring, lineWidth: 3)
                 Circle().trim(from: 0, to: done ? 1 : 0.28)
-                    .stroke(AngularGradient(colors: [Theme.clay, Theme.mauve, Theme.mist, Theme.clay],
+                    .stroke(AngularGradient(colors: [Theme.berry, Theme.plum, Theme.slate, Theme.berry],
                                             center: .center),
                             style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(rotate ? 360 : 0))
@@ -640,39 +743,51 @@ private struct LoadingStep: View {
                     .scaleEffect(done ? 1 : 0.3).opacity(done ? 1 : 0)
             }
             .frame(width: 78, height: 78)
-            Text(lines[min(idx, lines.count - 1)]).font(Font2.serif(20, .medium)).italic().foregroundStyle(Theme.ink.opacity(0.7))
-                .contentTransition(.opacity)
-            Spacer()
-        }
-        .onAppear {
-            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { rotate = true }
-            for i in 1..<lines.count {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.85 * Double(i)) {
-                    withAnimation(Motion.gentle) { idx = i }
-                    Haptics.light()
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
+                    HStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.berry)
+                        Text(line).font(Font2.sans(15, .semibold)).foregroundStyle(Theme.ink.opacity(0.75))
+                    }
+                    .popIn(delay: firstRow + rowGap * Double(i), from: 0.85)
                 }
             }
-            // The ring completes, the check pops — a beat of "it's done" before moving on.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-                withAnimation(Motion.pop) { done = true }
-                Haptics.success()
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { onNext() }
+            Spacer()
         }
+        .onAppear { run() }
+    }
+
+    private func run() {
+        withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { rotate = true }
+        for i in 0..<lines.count {                        // a soft tick as each row lands
+            DispatchQueue.main.asyncAfter(deadline: .now() + firstRow + rowGap * Double(i)) { Haptics.light() }
+        }
+        // The ring completes, the check pops — a beat of "it's done" before moving on.
+        let landed = firstRow + rowGap * Double(lines.count - 1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + landed + 0.55) {
+            withAnimation(Motion.pop) { done = true }
+            Haptics.success()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + landed + 1.15) { onNext() }
     }
 }
 
-// MARK: - 12 Ready / your plan (the sticker card, like 1505)
+// MARK: - 15 Ready / your plan (the sticker card)
 
 private struct ReadyStep: View {
     @Bindable var model: OnboardingModel
     var onNext: () -> Void
     @State private var placed = false       // the plan card lands like a sticker being pressed on
+    private var congrats: String {
+        let n = model.name.trimmingCharacters(in: .whitespaces)
+        return n.isEmpty ? "Congrats." : "Congrats, \(n)."
+    }
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 2) {
-                Text("Congrats.").font(Font2.serif(34, .semibold)).foregroundStyle(Theme.ink)
-                SerifHeadline(lead: "You're", accent: "ready", trail: "to start", size: 30, accentColor: Theme.rose)
+                Text(congrats).font(Font2.serif(34, .semibold)).foregroundStyle(Theme.ink)
+                SerifHeadline(lead: "You're", accent: "ready", trail: "to start", size: 30, accentColor: Theme.berry)
             }
             .multilineTextAlignment(.center).padding(.top, 10).padding(.horizontal, 28)
             Spacer()
@@ -681,7 +796,7 @@ private struct ReadyStep: View {
                 .rotationEffect(.degrees(placed ? 0 : 3.5))
                 .opacity(placed ? 1 : 0)
             Spacer()
-            ctaPad(PrimaryButton(title: "Start now", color: Theme.mist, action: onNext))
+            ctaPad(PrimaryButton(title: "Start now", action: onNext))
         }
         .onAppear {
             withAnimation(Motion.bouncy.delay(0.3)) { placed = true }
@@ -698,24 +813,36 @@ private struct ReadyStep: View {
     }
 }
 
-// MARK: - 16 Sign your promise
+// MARK: - 16 Make it official (signature — a light-hearted pact, not a contract)
 
 private struct SignPromiseStep: View {
+    var model: OnboardingModel
     var onNext: () -> Void
     @State private var strokes: [[CGPoint]] = []
+
+    /// The pact itself — their name and their number, so the signature signs *something*.
+    private var pact: String {
+        let n = model.name.trimmingCharacters(in: .whitespaces)
+        return n.isEmpty
+            ? "I promise to show up for myself — all \(model.lengthDays) days of it."
+            : "I, \(n), promise to show up for myself — all \(model.lengthDays) days of it."
+    }
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 10)
             VStack(spacing: 14) {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill").font(.system(size: 12, weight: .bold))
-                    Text("9 in 10 who sign, finish").font(Font2.sans(12, .bold))
+                    Image(systemName: "heart.fill").font(.system(size: 12, weight: .bold))
+                    Text("a promise between you and you").font(Font2.sans(12, .bold))
                 }.foregroundStyle(Theme.ink.opacity(0.7))
                     .padding(.horizontal, 12).padding(.vertical, 7).background(Theme.chipFill, in: Capsule())
                     .popIn(delay: 0.3)
-                VStack(spacing: 2) {
-                    TypewriterHeadline(lead: "Sign your", accent: "promise", size: 30, accentColor: Theme.rose, alignment: .center)
-                    Text("A small commitment to yourself.").font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+                VStack(spacing: 8) {
+                    TypewriterHeadline(lead: "Make it", accent: "official", size: 30, alignment: .center)
+                    Text("“\(pact)”")
+                        .font(Font2.serif(16.5, .medium)).italic()
+                        .foregroundStyle(Theme.ink.opacity(0.6))
+                        .multilineTextAlignment(.center).padding(.horizontal, 4)
                 }
                 ZStack(alignment: .bottomTrailing) {
                     SignaturePad(strokes: $strokes).frame(height: 168)
@@ -725,12 +852,12 @@ private struct SignPromiseStep: View {
                         Text("Clear").font(Font2.sans(12, .bold)).foregroundStyle(Theme.ink.opacity(0.5)).underline().padding(10)
                     }
                 }
-                // I commit / Skip live INSIDE the card — it wakes up the moment ink lands.
-                PrimaryButton(title: "I commit", color: Theme.olive, action: onNext)
+                // The CTA lives INSIDE the card — it wakes up the moment ink lands.
+                PrimaryButton(title: "It's official", action: onNext)
                     .disabled(strokes.isEmpty).opacity(strokes.isEmpty ? 0.5 : 1)
                     .scaleEffect(strokes.isEmpty ? 0.98 : 1)
                     .animation(Motion.bouncy, value: strokes.isEmpty)
-                Button { onNext() } label: { Text("Skip").font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).underline() }
+                Button { onNext() } label: { Text("Skip for now").font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).underline() }
             }
             .padding(20).background(.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .shadow(color: .black.opacity(0.12), radius: 22, x: 0, y: 10).padding(.horizontal, 20)

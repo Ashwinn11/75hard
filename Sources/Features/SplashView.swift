@@ -32,15 +32,26 @@ struct SplashView: View {
 }
 
 /// The window root: the app content with the launch splash on top until it dismisses itself.
+/// Also hosts the quick-action deal sheet, so it can appear over any gate state
+/// (onboarding, lapsed paywall, or the app proper).
 struct AppRoot: View {
     @State private var showSplash = true
+    @State private var quick = QuickActions.shared
+
     var body: some View {
+        // Read `pending` in body (not just inside the Binding) so observation re-renders
+        // this view when a shortcut lands and the sheet actually presents.
+        let showDeal = quick.pending == .deal
         ZStack {
             RootGate()
             if showSplash {
                 SplashView { showSplash = false }
                     .transition(.opacity)
             }
+        }
+        .sheet(isPresented: Binding(get: { showDeal },
+                                    set: { if !$0 { quick.pending = nil } })) {
+            DealSheet { quick.pending = nil }
         }
     }
 }

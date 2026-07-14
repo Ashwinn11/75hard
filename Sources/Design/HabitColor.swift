@@ -1,23 +1,23 @@
 import SwiftUI
 
-/// Soft pastel palette for habit sticky-tiles and cards.
-/// Deliberately only a few gentle hues — no saturated colors anywhere.
+/// Soft palette for habit sticky-tiles and cards, derived from the porcelain-&-berry
+/// system. Deliberately only a few gentle hues — no saturated colors anywhere.
 enum HabitColor: String, CaseIterable, Codable, Identifiable {
     case rose, berry, blush, amber, sage, sky, lilac, sand
     var id: String { rawValue }
 
-    /// The single app palette = the 5 screen accent colors. One per case for cycling.
-    static var palette: [HabitColor] { [.rose, .sky, .sage, .blush, .amber] }  // clay·mist·olive·mauve·sand
+    /// The single app palette = the 5 supporting tile hues. One per case for cycling.
+    static var palette: [HabitColor] { [.rose, .sky, .sage, .blush, .amber] }  // berry·slate·moss·plum·gold
 
-    /// Habits use the same 5 accent colors as the buttons (each a soft tint→accent gradient).
+    /// Habits use tile tints of the app palette (each a soft tint→hue gradient).
     /// The 8 case names alias onto these 5 so existing code keeps working.
     var stops: [Color] {
         switch self {
-        case .rose, .berry:  return [Color(hex: "DCA48E"), Color(hex: "C4765A")]   // clay
-        case .sky:           return [Color(hex: "C0CDD3"), Color(hex: "94A8B1")]   // mist
-        case .sage:          return [Color(hex: "B4BE9C"), Color(hex: "8D9A70")]   // olive (lightened for tiles)
-        case .blush, .lilac: return [Color(hex: "C9ABB5"), Color(hex: "A98290")]   // mauve
-        case .amber, .sand:  return [Color(hex: "D0BA9E"), Color(hex: "B69B7C")]   // sand
+        case .rose, .berry:  return [Color(hex: "D9A5B6"), Color(hex: "BC7089")]   // berry
+        case .sky:           return [Color(hex: "B7C2D6"), Color(hex: "8FA0BC")]   // slate
+        case .sage:          return [Color(hex: "AFC2B4"), Color(hex: "84A18F")]   // moss
+        case .blush, .lilac: return [Color(hex: "C7B9D8"), Color(hex: "A791C1")]   // plum
+        case .amber, .sand:  return [Color(hex: "D6C29B"), Color(hex: "B49B6C")]   // gold
         }
     }
 

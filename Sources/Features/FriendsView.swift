@@ -208,7 +208,7 @@ private struct FriendProfileSheet: View {
                             SectionTitle(text: "On the challenge")
                             ChallengeStripCard(
                                 track: ChallengeTrack.allCases.first { $0.title == friend.challenge } ?? .custom,
-                                pillText: friend.challenge)
+                                pillText: friend.challenge, showTitle: false)
                             Text(friend.total > 0 ? "Day \(friend.day) · \(friend.done)/\(friend.total) done today"
                                                   : "Day \(friend.day)")
                                 .font(Font2.sans(13, .medium)).foregroundStyle(Theme.textSecondary)

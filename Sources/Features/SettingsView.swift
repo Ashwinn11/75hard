@@ -170,7 +170,7 @@ struct EditNameView: View {
             Text("Shown to friends on your invite and your check-ins.")
                 .font(Font2.sans(12, .medium)).foregroundStyle(Theme.textSecondary)
             Spacer()
-            PrimaryButton(title: "Save", color: Theme.mauve) { save() }.ctaWidth()
+            PrimaryButton(title: "Save") { save() }.ctaWidth()
         }
         .padding(20)
         .background(Theme.paper.ignoresSafeArea())
@@ -209,7 +209,7 @@ struct EditBioView: View {
                 .font(Font2.sans(11, .medium)).foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             Spacer()
-            PrimaryButton(title: "Save", color: Theme.olive) { save() }.ctaWidth()
+            PrimaryButton(title: "Save") { save() }.ctaWidth()
         }
         .padding(20)
         .background(Theme.paper.ignoresSafeArea())
@@ -236,15 +236,16 @@ struct DurationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
-            LengthPicker(days: $days, startDate: challenge?.startDate ?? Date())
+            ScrollView {
+                LengthPicker(days: $days, startDate: challenge?.startDate ?? Date())
+                    .padding(.top, 18).padding(.bottom, 12)
+            }
             if let c = challenge, days < c.currentDay {
                 Text("You're already on day \(c.currentDay) — the challenge can't be shorter than that.")
                     .font(Font2.sans(12, .medium)).foregroundStyle(Theme.rose)
-                    .multilineTextAlignment(.center).padding(.horizontal, 30).padding(.top, 10)
+                    .multilineTextAlignment(.center).padding(.horizontal, 30).padding(.bottom, 10)
             }
-            Spacer()
-            PrimaryButton(title: "Save", color: Theme.sand) { save() }.ctaWidth().padding(.bottom, 22)
+            PrimaryButton(title: "Save") { save() }.ctaWidth().padding(.horizontal, 20).padding(.bottom, 22)
         }
         .background(Theme.paper.ignoresSafeArea())
         .navigationTitle("Challenge length").navigationBarTitleDisplayMode(.inline)

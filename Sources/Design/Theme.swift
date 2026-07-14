@@ -1,37 +1,49 @@
 import SwiftUI
 
-/// Design system: "soft luxe" — warm cream stationery, espresso ink, and one muted
-/// earth accent per screen. Spa-morning energy (Aesop / Rituals), not candy pastels.
+/// Design system: "porcelain & berry" — a cool lilac-white ground, deep plum ink, and a
+/// single raspberry accent that owns every CTA. Supporting hues exist for tiles and
+/// avatars only; they never color a button.
 enum Theme {
 
     // MARK: Core
-    static let paper     = Color(hex: "FAF6EF")   // background — warm cream
+    static let paper     = Color(hex: "F5F3F7")   // background — cool porcelain
     static let cream     = paper                  // back-compat alias
-    static let ink       = Color(hex: "2B2420")   // espresso — text + dark CTA
+    static let ink       = Color(hex: "262130")   // plum-charcoal — text + dark CTA
 
-    // MARK: Per-screen earth accents
-    static let clay  = Color(hex: "C4765A")       // welcome / partner — terracotta
-    static let mist  = Color(hex: "94A8B1")       // app-preview / start — eucalyptus steam
-    static let olive = Color(hex: "6E7B54")       // friends / length / promise
-    static let mauve = Color(hex: "A98290")       // chips / quiz / custom — dusty rose
-    static let sand  = Color(hex: "B69B7C")       // choose / ready — warm camel
+    // MARK: Brand accent (the one CTA color, everywhere)
+    static let berry     = Color(hex: "A64D6D")   // raspberry
+    static let berryDeep = Color(hex: "7E3651")
+    static let berrySoft = Color(hex: "C98BA2")
 
-    static let rose     = clay                    // back-compat: primary accent
-    static let clayDeep = Color(hex: "AD5F43")    // deeper clay (avatar gradient)
+    // MARK: Supporting hues (habit tiles, avatars, charts — never buttons)
+    static let plum  = Color(hex: "9B84AE")
+    static let slate = Color(hex: "8291AD")
+    static let moss  = Color(hex: "6D8577")
+    static let gold  = Color(hex: "B49B6C")
+
+    // MARK: Back-compat aliases (the old per-screen accents now resolve into the new palette)
+    static let rose     = berry
+    static let clay     = berry
+    static let clayDeep = berryDeep
+    static let mist     = slate
+    static let olive    = moss
+    static let mauve    = plum
+    static let sand     = gold
 
     // MARK: Surfaces / lines
-    static let chipFill = Color(hex: "F1EAE0")
-    static let ring     = Color(hex: "E7DFD2")
+    static let chipFill = Color(hex: "ECE8F0")
+    static let ring     = Color(hex: "E1DCE7")
 
     // MARK: Semantic
     static let textSecondary = ink.opacity(0.5)
 
     // MARK: Gradients (kept subtle — surfaces are mostly flat)
-    static let clayGradient     = LinearGradient(colors: [clay, clayDeep], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let espressoGradient = LinearGradient(colors: [Color(hex: "3C332C"), ink], startPoint: .top, endPoint: .bottom)
+    static let berryGradient = LinearGradient(colors: [berrySoft, berry], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let clayGradient  = berryGradient   // back-compat alias
+    static let espressoGradient = LinearGradient(colors: [Color(hex: "342C40"), ink], startPoint: .top, endPoint: .bottom)
 
     // MARK: Metrics
-    static let pillRadius: CGFloat = 30
+    static let pillRadius: CGFloat = 18
     static let cardRadius: CGFloat = 26
 }
 
@@ -62,7 +74,7 @@ struct AppBackground: View {
     }
 
     private func meshColors(warmth: Double) -> [Color] {
-        let tint = accent ?? Theme.sand
+        let tint = accent ?? Theme.plum
         let breath = Theme.paper.mix(with: tint, by: warmth)
         let corner = Theme.paper.mix(with: tint, by: 0.035)
         return [

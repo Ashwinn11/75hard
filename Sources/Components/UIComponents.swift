@@ -1,11 +1,11 @@
 import SwiftUI
 
-// MARK: - Primary pill button (chunky, 30px radius)
+// MARK: - Primary button (chunky rounded rect, one brand accent everywhere)
 
 struct PrimaryButton: View {
     let title: String
     var icon: String? = nil
-    var color: Color = Theme.clay          // per-screen flat pastel accent
+    var color: Color = Theme.berry         // the single CTA color — override only for dark/ink variants
     var textColor: Color = .white
     var action: () -> Void
 
@@ -42,14 +42,10 @@ struct PillPressStyle: ButtonStyle {
 }
 
 extension View {
-    /// Caps a primary CTA to ~75% of the screen width, centered — matching the onboarding
+    /// Primary CTAs span their container's full width — matching the onboarding
     /// button treatment (`ctaPad`) so buttons feel consistent across the app.
     func ctaWidth() -> some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            self.containerRelativeFrame(.horizontal) { w, _ in w * 0.75 }
-            Spacer(minLength: 0)
-        }
+        frame(maxWidth: .infinity)
     }
 }
 
@@ -64,41 +60,6 @@ struct CircleIconButton: View {
                 .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
                 .frame(width: 44, height: 44).background(.white, in: Circle())
                 .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
-        }
-        .buttonStyle(PressableStyle())
-    }
-}
-
-// MARK: - Selector pill — ink-filled when selected, white with a ring otherwise
-
-struct SelectPill: View {
-    let text: String
-    let selected: Bool
-    var hPad: CGFloat = 18
-    var vPad: CGFloat = 11
-    /// When set, the ink capsule is shared across the group's pills via
-    /// matchedGeometryEffect, so selection *slides* between them instead of swapping fills.
-    var slide: (id: String, ns: Namespace.ID)? = nil
-    var action: () -> Void
-    var body: some View {
-        Button { Haptics.select(); action() } label: {
-            Text(text).font(Font2.sans(15, .bold)).foregroundStyle(selected ? .white : Theme.ink)
-                .padding(.horizontal, hPad).padding(.vertical, vPad)
-                .background {
-                    ZStack {
-                        Capsule().fill(Color.white)
-                        if selected {
-                            if let slide {
-                                Capsule().fill(Theme.ink)
-                                    .matchedGeometryEffect(id: slide.id, in: slide.ns)
-                            } else {
-                                Capsule().fill(Theme.ink)
-                            }
-                        }
-                    }
-                }
-                .overlay(Capsule().stroke(Theme.ring, lineWidth: selected ? 0 : 1.5))
-                .animation(Motion.snappy, value: selected)
         }
         .buttonStyle(PressableStyle())
     }
@@ -325,7 +286,8 @@ struct FloatingPill<Content: View>: View {
 struct ChallengeStripCard: View {
     let track: ChallengeTrack
     var pillText: String? = nil      // override for the floating pill; nil → the track's tagline
-    var showTitle = true
+    var pillIcon: String = "checkmark"   // icon beside an overridden pill text
+    var showTitle = true             // callers whose pill already names the challenge pass false
 
     private var pill: String? { pillText ?? (track.tagline.isEmpty ? nil : track.tagline) }
 
@@ -363,7 +325,7 @@ struct ChallengeStripCard: View {
                     FloatingPill(hPad: 10, vPad: 5) {
                         HStack(spacing: 5) {
                             if pillText != nil {
-                                Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
+                                Image(systemName: pillIcon).font(.system(size: 10, weight: .heavy))
                             }
                             Text(pill).font(Font2.sans(11, .bold))
                         }
@@ -372,7 +334,7 @@ struct ChallengeStripCard: View {
                     .offset(y: -11)   // float above the top edge, horizontally centered
                 }
             }
-            if showTitle && pillText == nil {   // pill already names the challenge — don't repeat it below
+            if showTitle {
                 Text(track.title).font(Font2.serif(22, .semibold)).foregroundStyle(Theme.ink)
             }
         }
@@ -444,11 +406,9 @@ struct EditTaskSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 TextField("New daily task", text: $draft.title)
                     .font(Font2.sans(18, .bold)).foregroundStyle(Theme.ink)
-                TextField("Add a note", text: $draft.subtitle)
-                    .font(Font2.sans(14, .medium)).foregroundStyle(Theme.ink.opacity(0.7))
             }
             .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
             .background(draft.color.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .animation(Motion.gentle, value: draft.color)
 
@@ -479,44 +439,110 @@ struct EditTaskSheet: View {
             Spacer()
         }
         .padding(24)
-        .presentationDetents([.height(380)])
+        .presentationDetents([.height(340)])
         .presentationCornerRadius(34)
         .presentationDragIndicator(.visible)
         .presentationBackground(.thinMaterial)
     }
 }
 
-// MARK: - Length picker (ruler + preset pills + date-range caption)
+// MARK: - Option row (the app's one selectable-choice card — quiz answers, durations)
 
-/// Shared by onboarding's LengthStep and Settings' DurationView.
+/// A full-width white card with a trailing radio-check. Selection fills the check berry
+/// and draws an accent border. Optional `note` (small sub-line) and `badge` (tiny tag).
+struct OptionRow: View {
+    let title: String
+    var note: String? = nil
+    var badge: String? = nil
+    let selected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button { Haptics.select(); action() } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(title).font(Font2.sans(16, .bold)).foregroundStyle(Theme.ink)
+                        if let badge {
+                            Text(badge.uppercased()).font(Font2.sans(9, .heavy)).tracking(1)
+                                .foregroundStyle(Theme.berry)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Theme.berry.opacity(0.12), in: Capsule())
+                        }
+                    }
+                    if let note {
+                        Text(note).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5))
+                    }
+                }
+                Spacer(minLength: 8)
+                ZStack {
+                    Circle().strokeBorder(selected ? Theme.berry : Theme.ring, lineWidth: 2)
+                        .frame(width: 24, height: 24)
+                    if selected {
+                        Circle().fill(Theme.berry).frame(width: 24, height: 24)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 15)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(selected ? Theme.berry : Theme.ring, lineWidth: selected ? 1.8 : 1))
+            .animation(Motion.snappy, value: selected)
+        }
+        .buttonStyle(PressableStyle())
+    }
+}
+
+// MARK: - Length picker (duration rows + inline ruler for Custom)
+
+/// Shared by onboarding's LengthStep and Settings' DurationView. Descriptive duration
+/// rows replace any preset-pill row; Custom expands the ruler inline.
 struct LengthPicker: View {
     @Binding var days: Int
     let startDate: Date
-    @Namespace private var pillNS      // the ink capsule slides between the pills
+    @State private var customMode: Bool
 
-    static let presets = [7, 14, 30, 75]
-    private var isCustom: Bool { !Self.presets.contains(days) }
+    static let presets: [(days: Int, note: String)] = [
+        (7,  "a one-week spark"),
+        (14, "two weeks to warm up"),
+        (30, "a month of momentum"),
+        (75, "the full journey"),
+    ]
 
-    var body: some View {
-        VStack(spacing: 0) {
-            RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.olive)
-                .padding(.horizontal, 16)
-            // One pill row: 7 · 14 · 30 · 75 · Custom (custom lights up when the ruler
-            // sits on a non-preset day).
-            HStack(spacing: 8) {
-                ForEach(Self.presets, id: \.self) { p in preset(p) }
-                SelectPill(text: "Custom", selected: isCustom, hPad: 14, slide: ("preset", pillNS)) {
-                    guard !isCustom else { return }
-                    withAnimation(Motion.snappy) { days = 45 }   // a distinctly non-preset start
-                }
-            }.padding(.top, 20)
-            Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 16)
-        }
+    init(days: Binding<Int>, startDate: Date) {
+        _days = days
+        self.startDate = startDate
+        _customMode = State(initialValue: !Self.presets.map(\.days).contains(days.wrappedValue))
     }
 
-    private func preset(_ p: Int) -> some View {
-        SelectPill(text: "\(p)", selected: days == p, hPad: 14, slide: ("preset", pillNS)) {
-            withAnimation(Motion.snappy) { days = p }
+    var body: some View {
+        VStack(spacing: 10) {
+            ForEach(Self.presets, id: \.days) { p in
+                OptionRow(title: "\(p.days) days", note: p.note,
+                          badge: p.days == 75 ? "signature" : nil,
+                          selected: !customMode && days == p.days) {
+                    withAnimation(Motion.snappy) { customMode = false; days = p.days }
+                }
+            }
+            OptionRow(title: "Custom", note: "you set the pace", selected: customMode) {
+                withAnimation(Motion.snappy) { customMode = true }
+            }
+            if customMode {
+                RulerSlider(value: $days, range: 1...75, unit: "days", accent: Theme.berry)
+                    .padding(.top, 6)
+                    .transition(.opacity)
+            }
+            Text(range).font(Font2.sans(13, .medium)).foregroundStyle(Theme.ink.opacity(0.5)).padding(.top, 8)
+        }
+        .padding(.horizontal, 20)
+        // The owner can set `days` after init (e.g. Settings loading the saved length):
+        // if it lands off-preset, flip to Custom so the selection state matches the value.
+        .onChange(of: days) { _, d in
+            if !Self.presets.map(\.days).contains(d) && !customMode { customMode = true }
         }
     }
 
@@ -591,14 +617,14 @@ func dayInWords(_ n: Int) -> String {
 
 /// Reused by onboarding's "invite your friends" screen and the Friends tab. `code` is nil while
 /// the code is still being provisioned (shows a placeholder). Styled like a letterpress
-/// stationery card: warm cotton stock with a double hairline border and a dashed rule.
+/// stationery card: cool porcelain stock with a double hairline border and a dashed rule.
 struct InviteTicket: View {
     let name: String
     var code: String? = nil
     var compact: Bool = false            // show only the code half (no "Join <name>" header/rule)
     var shareText: String? = nil         // when set, a share icon appears inline next to the code
     var challenge: String = "75 Her"     // the selected challenge, shown as the card's eyebrow
-    var ticketFill: Color = Color(hex: "F6F0E4")
+    var ticketFill: Color = Color(hex: "F2EEF6")
     @State private var shareBounce = 0
 
     var body: some View {

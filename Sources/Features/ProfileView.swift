@@ -126,7 +126,7 @@ struct ProfileView: View {
         Button { showPicker = true } label: {
             VStack(alignment: .leading, spacing: 8) {
                 SectionTitle(text: "Your challenge")
-                ChallengeStripCard(track: c.track, pillText: "Joined \(c.displayTitle)")
+                ChallengeStripCard(track: c.track, pillText: "Joined \(c.displayTitle)", showTitle: false)
             }
         }
         .buttonStyle(PressableStyle())

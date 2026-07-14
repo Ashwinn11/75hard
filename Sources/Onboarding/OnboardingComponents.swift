@@ -41,7 +41,7 @@ struct TypewriterText: View {
 /// The accent word is colored, not italicized (the italic-accent pattern went with the re-skin);
 /// `accentItalic` remains for the rare deliberately-italic line.
 func serifAttr(_ lead: String, accent: String? = nil, trail: String? = nil,
-               size: CGFloat = 34, accentColor: Color = Theme.rose, base: Color = Theme.ink,
+               size: CGFloat = 34, accentColor: Color = Theme.berry, base: Color = Theme.ink,
                accentItalic: Bool = false) -> AttributedString {
     func run(_ s: String, italic: Bool, color: Color) -> AttributedString {
         var a = AttributedString(s)
@@ -61,7 +61,7 @@ struct TypewriterHeadline: View {
     var accent: String? = nil
     var trail: String? = nil
     var size: CGFloat = 34
-    var accentColor: Color = Theme.rose
+    var accentColor: Color = Theme.berry
     var accentItalic: Bool = false
     var alignment: TextAlignment = .leading
 
@@ -73,150 +73,49 @@ struct TypewriterHeadline: View {
     }
 }
 
-// MARK: - Photo marquee (welcome wall)
+// MARK: - Dot calendar (welcome hero — 75 days as a filling grid, ending on a heart)
 
-private struct MarqueeRow: View {
-    let names: [String]
-    var leftward: Bool
-    var speed: Double
-    private let tileW: CGFloat = 120
-    private var tileH: CGFloat { tileW * 4 / 3 }     // locked 3:4 portrait
-    private let gap: CGFloat = 10
-    @State private var offset: CGFloat = 0
+/// The signature welcome visual: a 5×15 grid of 75 dots that pop in one by one.
+/// The first week fills berry (the journey starting), the final day is a small heart.
+struct DotCalendar: View {
+    var total: Int = 75
+    @State private var beat = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private static let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 9), count: 15)
 
     var body: some View {
-        let loop = names + names                     // two sets → seamless wrap
-        // Color.clear is flexible — it returns the proposed width, not the natural
-        // HStack width (~3900 pt). This prevents MarqueeRow from inflating the parent
-        // VStack beyond screen bounds. The HStack lives in an overlay so it never
-        // contributes to layout size.
-        Color.clear
-            .frame(height: tileH)
-            .overlay(alignment: .leading) {
-                HStack(spacing: gap) {
-                    ForEach(Array(loop.enumerated()), id: \.offset) { _, n in
-                        PhotoFill(name: n, fallback: gradientFor(n))
-                            .frame(width: tileW, height: tileH)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                }
-                .offset(x: offset)
-            }
-            .clipped()
-            .onAppear {
-                let total = (tileW + gap) * CGFloat(names.count)
-                offset = leftward ? 0 : -total
-                withAnimation(.linear(duration: speed).repeatForever(autoreverses: false)) { offset = leftward ? -total : 0 }
-            }
-    }
-    private func gradientFor(_ n: String) -> LinearGradient {
-        let palette: [HabitColor] = [.blush, .lilac, .sand, .sage, .rose, .sky]
-        // Deterministic hash (String.hashValue is randomized per launch — colors would reshuffle).
-        var h = 5381
-        for b in n.utf8 { h = (h &* 33) &+ Int(b) }
-        return palette[abs(h) % palette.count].gradient
-    }
-}
-
-/// A horizontal photo wall: two rows of 3:4 tiles drifting in opposite directions.
-struct PhotoMarquee: View {
-    var names: [String] = (1...15).map { "onb_g\($0)" }
-    var body: some View {
-        let rows = split(names, into: 2)
-        VStack(spacing: 10) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                MarqueeRow(names: row, leftward: i % 2 == 0, speed: 18 + Double(i) * 6)
+        LazyVGrid(columns: Self.columns, spacing: 12) {
+            ForEach(0..<total, id: \.self) { i in
+                dot(i)
+                    .frame(height: 11)
+                    .popIn(delay: 0.2 + Double(i) * 0.012, from: 0.2)
             }
         }
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .mask(LinearGradient(colors: [.clear, .black, .black, .black, .clear], startPoint: .leading, endPoint: .trailing))
-    }
-    private func split(_ names: [String], into count: Int) -> [[String]] {
-        var rows = Array(repeating: [String](), count: count)
-        for (i, n) in names.enumerated() { rows[i % count].append(n) }
-        return rows
-    }
-}
-
-// MARK: - Option pill (quiz)
-
-struct OptionPill: View {
-    let text: String
-    let selected: Bool
-    var action: () -> Void
-    var body: some View {
-        Button { Haptics.select(); action() } label: {
-            HStack(spacing: 10) {
-                if selected { Circle().fill(Theme.ink).frame(width: 8, height: 8) }
-                Text(text).font(Font2.sans(17, .bold)).foregroundStyle(Theme.ink)
-            }
-            .padding(.horizontal, 22).padding(.vertical, 17)        // hugs its content width
-            .background(.ultraThinMaterial, in: Capsule())          // native blur
-            .background(selected ? Theme.chipFill.opacity(0.6) : .clear, in: Capsule())
-            .overlay(Capsule().stroke(selected ? Theme.rose : Color.white.opacity(0.7), lineWidth: selected ? 2 : 1))
-            .shadow(color: .black.opacity(0.05), radius: 6, y: 3)
+        .onAppear {
+            // Once the grid has landed, the goal-heart starts a soft ambient beat.
+            guard !reduceMotion else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { beat = true }
         }
-        .buttonStyle(PressableStyle())
     }
-}
 
-// MARK: - Animated chips (appear one by one)
-
-struct AnimatedChips: View {
-    let items: [(icon: String, text: String)]
-    @State private var shownCount = 0
-    var body: some View {
-        FlowChips(items: items, shownCount: shownCount)
-            .onAppear {
-                for i in 0..<items.count {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35 * Double(i + 1)) {
-                        withAnimation(Motion.bouncy) { shownCount = i + 1 }
-                        Haptics.tap()
-                    }
-                }
-            }
-    }
-}
-
-private struct FlowChips: View {
-    let items: [(icon: String, text: String)]
-    let shownCount: Int
-
-    // Scatter the chips around the photo's edges so the subject in the center stays clear.
-    private let spots: [(alignment: Alignment, offset: CGSize)] = [
-        (.leading,        CGSize(width:  2, height: -52)),   // healthy — left, slightly above center
-        (.trailing,       CGSize(width: -2, height: -52)),   // fit — right, slightly above center
-        (.bottomLeading,  CGSize(width: 10, height: -30)),
-        (.bottomTrailing, CGSize(width: -8, height: -16)),
-        (.bottom,         CGSize(width: 24, height: -96)),
-    ]
-
-    var body: some View {
-        ZStack {
-            ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                if i < shownCount {
-                    let spot = spots[i % spots.count]
-                    FloatingPill(hPad: 15, vPad: 10) {
-                        HStack(spacing: 6) {
-                            Image(systemName: item.icon).font(.system(size: 13, weight: .bold))
-                            Text(item.text).font(Font2.sans(15, .bold))
-                        }
-                        .foregroundStyle(Theme.ink)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: spot.alignment)
-                    .offset(spot.offset)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
+    @ViewBuilder private func dot(_ i: Int) -> some View {
+        if i == total - 1 {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.berry)
+                .scaleEffect(beat ? 1.22 : 1)
+                .animation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true), value: beat)
+        } else {
+            Circle()
+                .fill(i < 7 ? Theme.berry.opacity(0.85) : Theme.ink.opacity(0.12))
+                .frame(width: 8, height: 8)
         }
-        .padding(18)
     }
 }
 
 // EditTaskSheet lives in Sources/Components/UIComponents.swift — it's shared with Today's edit flow.
 
-// MARK: - Signature pad (sign your promise)
+// MARK: - Signature pad (make-it-official step)
 
 struct SignaturePad: View {
     @Binding var strokes: [[CGPoint]]
@@ -246,7 +145,7 @@ struct SignaturePad: View {
 /// The real app screenshot (`Resources/Images/onb_preview.png`) shown in a phone frame.
 /// The frame's aspect matches the screenshot (1170×2532) so nothing is cropped.
 /// Full-device iPhone mockup around a real app screenshot — ported from yumeship's MockPhone
-/// (Figma base 1280×2642, screen inset 55, radii 210/165). Titanium band is brand-tinted clay.
+/// (Figma base 1280×2642, screen inset 55, radii 210/165). Titanium band is brand-tinted berry.
 /// `onb_preview` already carries its own status bar, so no Dynamic Island is drawn over it.
 struct AppScreenshot: View {
     var height: CGFloat = 430
@@ -258,19 +157,19 @@ struct AppScreenshot: View {
     var body: some View {
         ZStack {
             // Body
-            RoundedRectangle(cornerRadius: r(210), style: .continuous).fill(Color(hex: "1C1713"))
+            RoundedRectangle(cornerRadius: r(210), style: .continuous).fill(Color(hex: "191521"))
             // Outer hairline
             RoundedRectangle(cornerRadius: r(210), style: .continuous)
-                .strokeBorder(Color(hex: "7A4433"), lineWidth: max(1, r(5)))
-            // Titanium band (brand clay)
+                .strokeBorder(Color(hex: "6B3247"), lineWidth: max(1, r(5)))
+            // Titanium band (brand berry)
             RoundedRectangle(cornerRadius: r(205), style: .continuous)
-                .strokeBorder(Theme.clay, lineWidth: max(1, r(13))).padding(r(5))
+                .strokeBorder(Theme.berry, lineWidth: max(1, r(13))).padding(r(5))
             // Inner sheen
             RoundedRectangle(cornerRadius: r(200), style: .continuous)
-                .strokeBorder(Color(hex: "DCA48E"), lineWidth: max(1, r(5))).padding(r(10)).opacity(0.9)
+                .strokeBorder(Color(hex: "CB93A8"), lineWidth: max(1, r(5))).padding(r(10)).opacity(0.9)
             // Bezel reflection
             RoundedRectangle(cornerRadius: r(187), style: .continuous)
-                .strokeBorder(Color(hex: "6E655E"), lineWidth: max(1, r(2))).padding(r(23)).opacity(0.8)
+                .strokeBorder(Color(hex: "68606E"), lineWidth: max(1, r(2))).padding(r(23)).opacity(0.8)
             // Screen
             Group {
                 if AppImage.exists("onb_preview") { PhotoFill(name: "onb_preview") }

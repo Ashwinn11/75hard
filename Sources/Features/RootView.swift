@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     @State private var celebration = CelebrationCenter()
     @State private var tab = Tab.today
+    @State private var quick = QuickActions.shared
 
     enum Tab: Hashable { case today, friends, profile }
 
@@ -39,6 +40,13 @@ struct RootView: View {
             if new == nil, let old {
                 Ratings.note(celebration.finale ? .challengeFinished : .dayComplete(day: old.day))
             }
+        }
+        // "Log today" quick action → land on the Today tab (cold launches start there anyway).
+        .onChange(of: quick.pending) { _, a in
+            if a == .logToday { tab = .today; quick.pending = nil }
+        }
+        .onAppear {
+            if quick.pending == .logToday { tab = .today; quick.pending = nil }
         }
     }
 }
