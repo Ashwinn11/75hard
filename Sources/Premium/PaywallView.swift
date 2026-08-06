@@ -34,7 +34,7 @@ struct PaywallView: View {
     private var ctaTitle: String {
         if busy { return "One sec…" }
         guard let p = selected else { return "Start the journey" }
-        return ctaFlip ? "Start for \(p.price)" : "I'm all in"
+        return ctaFlip ? "Subscribe for \(p.price)" : "I'm all in"
     }
 
     var body: some View {
@@ -45,16 +45,18 @@ struct PaywallView: View {
                 VStack(spacing: 2) {
                     Text("All \(days) days. All in.")
                         .font(Font2.serif(30, .semibold)).foregroundStyle(Theme.ink)
-                    Text("Every feature, from day one")
+                    Text("Meet her on day \(days)")
                         .font(Font2.serif(26, .semibold)).foregroundStyle(Theme.ink)
                 }
                 .multilineTextAlignment(.center)
 
+                // Benefit-of-benefit, not a feature list — each line closes the loop the
+                // "future you" onboarding step opened, rather than naming the feature itself.
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(["Every challenge, fully unlocked",
-                             "Daily tracking, photos & streaks",
-                             "Friends who keep you showing up",
-                             "Widgets & gentle reminders"], id: \.self) { b in
+                    ForEach(["Every day unlocked — nothing stalls the streak",
+                             "Proof it's working — photos & streaks that add up",
+                             "People who won't let you quit",
+                             "Nudges so showing up stops being a decision"], id: \.self) { b in
                         Label(b, systemImage: "checkmark.circle.fill")
                             .font(Font2.sans(14, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
                     }
